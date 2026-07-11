@@ -213,6 +213,24 @@ justfile
     custom routes needed. Hubble is unaffected: it instruments flows via eBPF
     at the pod veth/socket layer, before encapsulation, so flow/L7 visibility
     is identical either way. See `applications/infrastructure/cilium/values.yaml`.
+14. **The control-plane node carries a `node-role.kubernetes.io/control-plane=
+    true:NoSchedule` taint** (`control-plane.sh`'s k3s `config.yaml`), unlike
+    a default k3s install — k3s doesn't taint its server node the way
+    kubeadm-based clusters do, so without this, regular workloads (Prometheus,
+    Tempo, chaos-mesh, promtail, otel-collector, kube-state-metrics, ArgoCD's
+    own server/repo-server/redis, ...) are free to land right alongside k3s
+    server + containerd + cilium-agent + cilium-envoy. On the control-plane's
+    e2-medium (2 vCPU/4GB) that's not hypothetical: observed directly as load
+    average 10+ on 2 cores and ~130MB free memory, with the API server itself
+    going unresponsive to kubectl. `cilium-agent`/`cilium-envoy` need no
+    toleration changes — both already default to a wildcard
+    `tolerations: [{operator: Exists}]` in the vendored chart. Nothing else
+    needs control-plane residency specifically, so everything else simply
+    schedules onto a worker instead. If you ever see kube-system addons
+    (coredns, metrics-server, local-path-provisioner) or any workload stuck
+    Pending with a `node(s) had untolerated taint` event, that's this taint
+    doing its job — the fix is scheduling it onto a worker, not removing the
+    taint.
 
 ## Everything else in `applications/` (Rook, Cilium base config, Sloth, l7-policies, dashboards)
 

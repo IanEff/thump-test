@@ -56,6 +56,19 @@ disable:
 cluster-cidr: "10.244.0.0/16"
 service-cidr: "10.96.0.0/12"
 cluster-domain: "cluster.local"
+# k3s doesn't taint its server node the way kubeadm-based clusters do, so
+# regular workloads (Prometheus, Tempo, chaos-mesh, promtail, otel-collector,
+# kube-state-metrics, ArgoCD's own server/repo-server/redis, ...) are free to
+# land here right alongside k3s server + containerd + cilium-agent +
+# cilium-envoy — on an e2-medium (2 vCPU/4GB) that's a real problem, not a
+# hypothetical one: observed directly as load average 10+ on 2 cores and
+# ~130MB free memory, with the API server itself becoming unresponsive to
+# kubectl. Both cilium-agent and cilium-envoy already default to a wildcard
+# `tolerations: [{operator: Exists}]` in the vendored chart, so they need no
+# changes to keep running here; nothing else needs control-plane residency
+# specifically, so everything else simply schedules onto a worker instead.
+node-taint:
+  - "node-role.kubernetes.io/control-plane=true:NoSchedule"
 tls-san:
   - "${CONTROL_PLANE_INTERNAL_IP}"
   - "${CONTROL_PLANE_EXTERNAL_IP}"
