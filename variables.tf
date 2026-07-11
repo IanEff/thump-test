@@ -47,9 +47,9 @@ variable "control_plane_machine_type" {
 }
 
 variable "node_machine_type" {
-  description = "Machine type for each k3s agent / Ceph OSD node."
+  description = "Machine type for each k3s agent / Ceph OSD node. e2-standard-4 (4 vCPU/16GB), not e2-standard-2 — once the control-plane taint (see control-plane.sh) pushed Prometheus/Tempo/chaos-mesh/ArgoCD-server/etc. onto the 3 workers, their combined CPU *requests* (not usage) hit 100% on every worker (2/2 vCPU each) with 32 pods stuck Pending needing ~2.64 more vCPU just to clear the backlog — confirmed via `kubectl describe node`'s Allocated resources section. Memory stayed under 50% throughout, so this is purely a CPU-request shortfall; a 4th e2-standard-2 worker was considered (cheaper, ~$0.076/hr vs. ~$0.201/hr for this bump) but only brings total capacity to 8 vCPU against ~8.64 vCPU of demand — still short, and adding an OSD-hosting node changes Ceph's failure-domain topology, a bigger decision than 'add headroom.'"
   type        = string
-  default     = "e2-standard-2"
+  default     = "e2-standard-4"
 }
 
 variable "boot_disk_size_gb" {
