@@ -32,8 +32,12 @@ apt-get update -y
 apt-get install -y git
 
 if [ -n "$${GITOPS_SSH_KEY_PATH:-}" ]; then
+    # See control-plane-bootstrap.sh.tpl's matching comment: GIT_SSH_COMMAND
+    # is a no-op against an https:// URL, so it must be rewritten to
+    # git@host:owner/repo.git for the deploy key to actually be used.
+    SSH_URL=$(echo "$${GITOPS_REPO_URL}" | sed -E "s#https://([^/]+)/#git@\1:#")
     GIT_SSH_COMMAND="ssh -i $${GITOPS_SSH_KEY_PATH} -o StrictHostKeyChecking=no" \
-        git clone "$${GITOPS_REPO_URL}" /ceph-lab
+        git clone "$${SSH_URL}" /ceph-lab
 elif [ -n "$${GITOPS_REPO_TOKEN:-}" ]; then
     AUTH_URL=$(echo "$${GITOPS_REPO_URL}" | sed "s#https://#https://git:$${GITOPS_REPO_TOKEN}@#")
     git clone "$${AUTH_URL}" /ceph-lab

@@ -34,8 +34,16 @@ apt-get update -y
 apt-get install -y git
 
 if [ -n "$${GITOPS_SSH_KEY_PATH:-}" ]; then
+    # GIT_SSH_COMMAND only affects git's ssh:// transport — it's silently a
+    # no-op against an https:// URL (git never invokes ssh for that
+    # transport). gitops_repo_url is https:// here, so it must be rewritten
+    # to the git@host:owner/repo.git form or the deploy key never actually
+    # gets used: clone would then succeed anonymously (fine for a public
+    # repo's read-only clone) while install_argocd.sh's later `git push`
+    # fails with "could not read Username" — the exact failure this masked.
+    SSH_URL=$(echo "$${GITOPS_REPO_URL}" | sed -E "s#https://([^/]+)/#git@\1:#")
     GIT_SSH_COMMAND="ssh -i $${GITOPS_SSH_KEY_PATH} -o StrictHostKeyChecking=no" \
-        git clone "$${GITOPS_REPO_URL}" /ceph-lab
+        git clone "$${SSH_URL}" /ceph-lab
 elif [ -n "$${GITOPS_REPO_TOKEN:-}" ]; then
     AUTH_URL=$(echo "$${GITOPS_REPO_URL}" | sed "s#https://#https://git:$${GITOPS_REPO_TOKEN}@#")
     git clone "$${AUTH_URL}" /ceph-lab

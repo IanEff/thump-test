@@ -1,16 +1,20 @@
 kubeProxyReplacement: true
-routingMode: native
-autoDirectNodeRoutes: true
-# Must match POD_CIDR (gitops.env) / ipam.operator.clusterPoolIPv4PodCIDRList
-# below. Static, not env-specific — kept here (not kustomization.yaml's
-# valuesInline) so it's present for BOTH the ArgoCD/Kustomize reconciliation
-# path AND install_cilium.sh's direct `helm -f values.yaml` bootstrap install.
-# Cilium's own chart only guards this at Helm template-time when
-# enableIPv4Masquerade is explicitly truthy in values (it defaults to nil
-# there), so a missing CIDR doesn't fail the install — it fails at runtime
-# instead, since the cilium-agent binary itself defaults
-# --enable-ipv4-masquerade=true regardless of what the chart rendered.
-ipv4NativeRoutingCIDR: 10.244.0.0/16
+# tunnel (VXLAN), not native — unlike ceph-lab's Lima network, which is a
+# real L2 segment where autoDirectNodeRoutes + a kernel route is enough for
+# cross-node pod delivery. GCP's VPC is routed at Google's SDN layer: a
+# packet only gets delivered to a node if there's a matching VPC route
+# (google_compute_route) for its destination CIDR, and this repo's Tofu
+# creates none (Cilium's per-node pod-CIDR slice from cluster-pool IPAM is
+# decided at runtime, not something Tofu can pre-declare a route for).
+# Verified directly via `cilium-dbg status --verbose`: host-to-host traffic
+# (10.10.0.x) was fine, but EVERY cross-node pod-to-pod probe (10.244.x.x)
+# timed out — native routing's node-level route never reaches GCP's actual
+# routing table. Tunnel mode sidesteps this entirely: pod traffic rides
+# inside a UDP/VXLAN packet between real node IPs, which GCP already knows
+# how to route, so no can_ip_forward/custom routes are needed. Hubble is
+# unaffected either way — it instruments flows via eBPF at the pod
+# veth/socket layer, before encapsulation.
+routingMode: tunnel
 
 bpf:
   masquerade: true

@@ -197,6 +197,22 @@ justfile
     channel, and still uses `var.allowed_source_ranges`. Callers need
     `roles/iap.tunnelResourceAccessor` in addition to the existing
     `roles/compute.osLoginUser` requirement.
+13. **Cilium runs in `routingMode: tunnel` (VXLAN), not `native`.** ceph-lab
+    uses native routing + `autoDirectNodeRoutes` because Lima's host-only
+    network is a real L2 segment — a kernel route plus ARP is enough for
+    cross-node pod delivery. GCP's VPC is routed at Google's SDN layer, not
+    L2: a packet only reaches a node if there's a matching VPC route
+    (`google_compute_route`) for its destination CIDR, and this repo's Tofu
+    creates none (Cilium's cluster-pool IPAM decides each node's pod-CIDR
+    slice at runtime, not something Tofu can pre-declare a route for).
+    Native routing was tried first and failed exactly as you'd expect:
+    `cilium-dbg status --verbose` showed host-to-host traffic (`10.10.0.x`)
+    fine, but 100% of cross-node pod-to-pod probes (`10.244.x.x`) timing out.
+    Tunnel mode sidesteps this — pod traffic rides inside VXLAN between real
+    node IPs, which GCP already knows how to route, no `can_ip_forward` or
+    custom routes needed. Hubble is unaffected: it instruments flows via eBPF
+    at the pod veth/socket layer, before encapsulation, so flow/L7 visibility
+    is identical either way. See `applications/infrastructure/cilium/values.yaml`.
 
 ## Everything else in `applications/` (Rook, Cilium base config, Sloth, l7-policies, dashboards)
 

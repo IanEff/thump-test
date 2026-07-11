@@ -7,8 +7,8 @@
 # reconciles against (applications/infrastructure/cilium/values.yaml) via -f,
 # only overriding the two truly instance-specific values (the control-plane's
 # IP, unknown until `tofu apply`) on top with --set. Everything else,
-# including static-but-easy-to-forget settings like ipv4NativeRoutingCIDR,
-# belongs IN values.yaml itself — not duplicated here or in
+# including static-but-easy-to-forget settings like routingMode, belongs IN
+# values.yaml itself — not duplicated here or in
 # kustomization.yaml's valuesInline — precisely because this script's `-f`
 # doesn't go through Kustomize at all. Ported from a version that duplicated
 # every setting as a separate --set flag — that duplication is exactly what
