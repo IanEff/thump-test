@@ -47,6 +47,32 @@ gatewayAPI:
       matchLabels:
         node-role.kubernetes.io/control-plane: "true"
 
+# Required for gatewayAPI.hostNetwork above to actually work: binding ports
+# 80/443 on the HOST network namespace needs CAP_NET_BIND_SERVICE (the envoy
+# process isn't root), and the chart's own comment on
+# envoy.securityContext.capabilities warns that "the cilium-envoy-starter
+# wrapper drops all capabilities after forking the actual Envoy process"
+# unless keepCapNetBindService is also set — granting the capability to the
+# container alone isn't enough. Without both, every cilium-envoy pod on every
+# node (not just the one gatewayAPI.hostNetwork.nodeLabelSelector pins the
+# Gateway to — the capability gap applies to the shared per-node Envoy
+# DaemonSet regardless of node) fails identically:
+# `listener 'kube-system/cilium-gateway-cilium-gateway/listener' failed to
+# bind or apply socket options: cannot bind '0.0.0.0:80': Permission denied`,
+# retried in a tight ~15s loop forever — confirmed directly in cilium-envoy's
+# own logs on all 4 nodes, including the control-plane. Must list NET_ADMIN
+# and SYS_ADMIN explicitly too (not just NET_BIND_SERVICE): Helm merges this
+# list by full replacement, not by appending, so omitting them would silently
+# drop capabilities the chart's default already required.
+envoy:
+  securityContext:
+    capabilities:
+      envoy:
+        - NET_ADMIN
+        - SYS_ADMIN
+        - NET_BIND_SERVICE
+      keepCapNetBindService: true
+
 ipam:
   operator:
     clusterPoolIPv4PodCIDRList: ["10.244.0.0/16"]
