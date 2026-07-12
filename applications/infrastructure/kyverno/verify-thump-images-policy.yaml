@@ -1,9 +1,6 @@
-# Audit + Ignore, NOT Enforce: as of 2026-07-11 only thump-clank and
-# thump-rattle are actually signed (verified live against Rekor) —
-# thump-hiss and thump-thump have no .sig tag on GHCR yet. Flipping to
-# Enforce before all four beats are signed would hard-deny hiss/thump pod
-# creation cluster-wide the moment ArgoCD syncs. See CLAUDE.md gotcha #17
-# for the full story and the checklist for flipping this to Enforce.
+# Enforce, all four beats signed as of 2026-07-12 (D6 make sign-images
+# run). See CLAUDE.md gotcha #17 for the full story and D7(b) in
+# ~/Documents/vault/Projects/thump/phase-d-live-payoff-guide.md.
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
@@ -11,12 +8,11 @@ metadata:
   annotations:
     policies.kyverno.io/title: Verify thump image signatures
     policies.kyverno.io/description: >-
-      Audits ghcr.io/ianeff/thump-* pod images for a valid keyless cosign
-      signature (Fulcio-issued cert, Rekor-logged). Audit/Ignore only until
-      all four thump beats are signed and Enforce is turned on manually.
-      See CLAUDE.md gotcha #17.
+      Enforces ghcr.io/ianeff/thump-* pod images carry a valid keyless
+      cosign signature (Fulcio-issued cert, Rekor-logged). See CLAUDE.md
+      gotcha #17.
 spec:
-  validationFailureAction: Audit
+  validationFailureAction: Enforce
   failurePolicy: Ignore
   background: false
   webhookTimeoutSeconds: 30
@@ -30,15 +26,20 @@ spec:
       verifyImages:
         - imageReferences:
             - "ghcr.io/ianeff/thump-*"
-          # Kyverno requires this explicit false whenever
-          # validationFailureAction is Audit (audit mode can't safely
-          # mutate the admitted object) — mutateDigest defaults to true,
-          # and leaving it unset makes the whole ClusterPolicy invalid.
-          # Confirmed live 2026-07-12: both `kyverno apply` and a
-          # server-side dry-run against the cluster's own
-          # validate-policy.kyverno.svc webhook rejected this file
-          # without this field, which is why it had never actually synced.
-          mutateDigest: false
+          # mutateDigest:false was required for Audit mode (mutating the
+          # admitted object is unsafe when only auditing). It has to flip
+          # to true together with Enforce, not stay false: the real beat
+          # Deployments reference images by tag, and validate_image.go
+          # treats "no digest in the ref" as an automatic fail regardless
+          # of whether the image verified — confirmed live 2026-07-12 via
+          # `kyverno apply` against the actual running hiss pod manifest
+          # (tag ref): image verification passed (real cosign/Rekor
+          # check) but the run still reported fail:1, because nothing had
+          # mutated the tag into a digest first. mutateDigest:true lets
+          # Enforce mode patch the resolved digest into the pod spec
+          # before that check runs, so a genuinely signed tag-referenced
+          # image actually passes instead of failing every time.
+          mutateDigest: true
           attestors:
             - entries:
                 - keyless:
