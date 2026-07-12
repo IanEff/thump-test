@@ -312,7 +312,7 @@ justfile
     list --service=compute.googleapis.com --project=<id>` for current
     usage/limit before assuming the machine-type default itself needs to
     change.
-17. **New: Kyverno (admission-controller-only, Audit mode).**
+17. **Kyverno (admission-controller-only, Enforce mode as of 2026-07-12).**
     `applications/infrastructure/kyverno/` (sync-wave 40, same tier as
     chaos-mesh) installs the upstream `kyverno/kyverno` chart v3.8.2 via
     `helmCharts:` in `kustomization.yaml` — not vendored, fetched live by
@@ -328,33 +328,57 @@ justfile
     `cleanupController.enabled`, and `reportsController.enabled` all to
     `false` — only the always-on `admissionController` runs (confirmed via
     the same render: exactly one `Deployment`,
-    `kyverno-admission-controller`), since the sole purpose here is a
-    `verifyImages` gate at pod-create time, not policy reporting/cleanup/
-    background remediation. The sibling `verify-thump-images-policy.yaml`
-    ClusterPolicy (loaded via a plain `resources:` entry alongside
-    `helmCharts:`, `includeCRDs: true` — same mixed-file pattern as
-    `applications/infrastructure/cilium/kustomization.yaml`) ships as
-    `validationFailureAction: Audit` + `failurePolicy: Ignore` +
-    `background: false`, NOT Enforce: as of 2026-07-11, `cosign verify`
-    against Rekor confirms only `thump-clank` and `thump-rattle` images
-    carry a `.sig` tag on GHCR (signed via an interactive `make sign-images`
-    browser OIDC login as ian.furst@gmail.com through GitHub's Fulcio
-    issuer, `https://github.com/login/oauth` — there is no CI signing
-    workflow in the `thump` repo). `thump-hiss` and `thump-thump` have never
-    been signed. Flipping `validationFailureAction` to `Enforce` before all
-    four beats are signed would hard-deny hiss/thump pod creation
-    cluster-wide the moment ArgoCD syncs. **Do not flip to Enforce** without
-    first running `make sign-images` for all four beats in the `thump` repo
-    and confirming via `kubectl get clusterpolicyreport,policyreport -A`
-    that no fail entries remain for `ghcr.io/ianeff/thump-*`. If the
-    `thump` repo ever adds CI-based (GitHub Actions OIDC) signing, this
-    policy's `subject`/`issuer` will need updating or broadening to a
-    regex (`subjectRegExp`/`issuerRegExp`) to also trust
-    `https://token.actions.githubusercontent.com` — the current exact-string
-    attestor only trusts the interactive human login identity. No
-    CiliumNetworkPolicy was added for the `kyverno` namespace, matching the
-    chaos-mesh precedent (gotcha #10) — no per-namespace CNP exists there
-    either, and no cluster-wide default-deny exists in
+    `kyverno-admission-controller`). **`reportsController.enabled: false`
+    means `kubectl get policyreport,clusterpolicyreport -A` will always be
+    empty on this rig** — don't use it to check admission results; read the
+    `kyverno-admission-controller` pod's own logs (`missing digest`/
+    `verifying image signatures`/`blocking admission request` trace lines,
+    or `kubectl get events --field-selector reason=FailedCreate`) instead.
+    The sibling `verify-thump-images-policy.yaml` ClusterPolicy (loaded via
+    a plain `resources:` entry alongside `helmCharts:`, `includeCRDs: true`
+    — same mixed-file pattern as
+    `applications/infrastructure/cilium/kustomization.yaml`) shipped as
+    `validationFailureAction: Audit` through 2026-07-11 (only `thump-clank`/
+    `thump-rattle` signed at that point) but is now **`Enforce`**
+    (2026-07-12, D7(b) —
+    `~/Documents/vault/Projects/thump/phase-d-live-payoff-guide.md`), once
+    all four beats were signed (`make sign-images`, D6) and two live-only
+    findings got fixed:
+    - **`mutateDigest` must flip to `true` together with `Enforce`, not
+      stay `false`.** `false` is required for Audit (mutating the admitted
+      object is unsafe when only auditing), but the real beat Deployments
+      reference images by tag, and `validate_image.go`'s digest-presence
+      check fails any tag-only ref regardless of signature unless
+      something mutates the tag into a digest first. Confirmed live via
+      `kyverno apply --registry` against the real running pod manifests:
+      `fail:1` with `mutateDigest:false` even for a genuinely signed
+      image, `pass:2/fail:0` once flipped to `true`.
+    - **Kyverno's autogen (the synthetic Deployment/CronJob-level copies
+      of a Pod-matched rule, for early admission-time feedback) never
+      gets the mutate half — only the kind literally named in `match:`
+      does.** With tag-referenced images this means the autogen copies
+      fail *permanently*, signed or not: confirmed live, the autogen rule
+      ran no cosign/mutate step at all before "missing digest," while the
+      base Pod rule mutated+verified correctly every time. A real
+      `kubectl rollout restart` got blocked at the Deployment PATCH
+      itself before any pod was created, before this was diagnosed. Fixed
+      by disabling autogen entirely (`pod-policies.kyverno.io/
+      autogen-controllers: "none"` annotation) — enforcement now lives at
+      the one place it actually works and actually matters: real Pod
+      creation.
+    Net effect once both are fixed: `helm upgrade`/`kubectl rollout
+    restart` on the real Deployments succeed cleanly for signed images (the
+    event log shows the image ref gets mutated to `tag@sha256:...`), and a
+    deliberately unsigned tag (`kubectl set image deployment/<beat>
+    <beat>=...:<unsigned-tag>`) gets a real `FailedCreate` event citing
+    `no signatures found`. If the `thump` repo ever adds CI-based (GitHub
+    Actions OIDC) signing, this policy's `subject`/`issuer` will need
+    updating or broadening to a regex (`subjectRegExp`/`issuerRegExp`) to
+    also trust `https://token.actions.githubusercontent.com` — the current
+    exact-string attestor only trusts the interactive human login identity.
+    No CiliumNetworkPolicy was added for the `kyverno` namespace, matching
+    the chaos-mesh precedent (gotcha #10) — no per-namespace CNP exists
+    there either, and no cluster-wide default-deny exists in
     `applications/infrastructure/l7-policies/`.
 
 ## Everything else in `applications/` (Rook, Cilium base config, Sloth, l7-policies, dashboards)
