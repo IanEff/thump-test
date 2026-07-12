@@ -11,6 +11,20 @@ metadata:
       Enforces ghcr.io/ianeff/thump-* pod images carry a valid keyless
       cosign signature (Fulcio-issued cert, Rekor-logged). See CLAUDE.md
       gotcha #17.
+    # Autogen (Kyverno generating Deployment/CronJob-level copies of this
+    # rule for early admission-time feedback) only carries the *validate*
+    # half of verifyImages, never mutateDigest — confirmed live
+    # 2026-07-12: the autogen Deployment rule ran no cosign/mutate step
+    # at all, straight to "missing digest", while the base Pod rule
+    # mutated + verified correctly every time. Since our images are
+    # tag-referenced (the Helm chart's normal shape), the autogen copies
+    # would fail permanently regardless of signing — not a bug to work
+    # around, a mismatch between "mutate to a digest" and "check a
+    # controller resource that never gets mutated." Disabling autogen
+    # leaves enforcement at the one place it actually works: real Pod
+    # creation, which is also the only place an unsigned image can
+    # actually run.
+    pod-policies.kyverno.io/autogen-controllers: "none"
 spec:
   validationFailureAction: Enforce
   failurePolicy: Ignore
