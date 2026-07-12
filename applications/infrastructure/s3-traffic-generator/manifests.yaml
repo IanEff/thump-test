@@ -41,6 +41,8 @@ spec:
               # Write the Python script with indentation
               cat <<'EOF' > /start-traffic.py
               import os
+              import socket
+              import sys
               import time
               import uuid
               import boto3
@@ -76,8 +78,9 @@ spec:
                   bucket_name = f.read().strip()
 
               s3_endpoint = f"http://{bucket_host}:{bucket_port}"
+              pod_name = socket.gethostname()
 
-              print(f"Connecting to S3 at {s3_endpoint} on bucket {bucket_name}...")
+              print(f"[{pod_name}] Connecting to S3 at {s3_endpoint} on bucket {bucket_name}...", flush=True)
               s3 = boto3.client(
                   's3',
                   endpoint_url=s3_endpoint,
@@ -85,8 +88,10 @@ spec:
                   aws_secret_access_key=aws_secret_key
               )
 
-              print("Starting S3 traffic generation loop...")
+              print(f"[{pod_name}] Starting S3 traffic generation loop...", flush=True)
+              iteration = 0
               while True:
+                  iteration += 1
                   with tracer.start_as_current_span("traffic-iteration") as parent_span:
                       try:
                           # 1. Write objects
@@ -96,31 +101,40 @@ spec:
                               with tracer.start_as_current_span("s3-upload-file") as upload_span:
                                   s3.put_object(Bucket=bucket_name, Key=key, Body=b"A"*1024)
                                   uploaded_keys.append(key)
-                              
+                          print(f"[{pod_name}] iteration {iteration}: uploaded {len(uploaded_keys)} objects", flush=True)
+
                           # 2. List objects
                           with tracer.start_as_current_span("s3-list-objects") as list_span:
                               response = s3.list_objects_v2(Bucket=bucket_name)
                               contents = response.get('Contents', [])
-                              print(f"Listed {len(contents)} objects in bucket.")
-                              
+                              print(f"[{pod_name}] iteration {iteration}: listed {len(contents)} objects in bucket", flush=True)
+
                           time.sleep(5)
-                          
+
                           # 3. Clean up uploaded files
                           for key in uploaded_keys:
                               with tracer.start_as_current_span("s3-delete-object") as delete_span:
                                   s3.delete_object(Bucket=bucket_name, Key=key)
-                          print(f"Cleaned up {len(uploaded_keys)} objects.")
-                          
+                          print(f"[{pod_name}] iteration {iteration}: cleaned up {len(uploaded_keys)} objects", flush=True)
+
                           time.sleep(2)
                       except Exception as e:
-                          print(f"Error during iteration: {e}")
+                          print(f"[{pod_name}] iteration {iteration}: ERROR: {e}", file=sys.stderr, flush=True)
                           time.sleep(5)
               EOF
 
-              # Create the shell helper wrapper
+              # Create the shell helper wrapper. Guards against stacking a second
+              # traffic loop on top of one already running (e.g. a repeated
+              # `just generate-traffic` invocation hitting a pod that was already
+              # scaled up) by checking a pidfile before starting.
               cat <<'EOF' > /start-traffic.sh
               #!/bin/sh
-              python3 /start-traffic.py
+              if [ -f /tmp/traffic.pid ] && [ -d "/proc/$(cat /tmp/traffic.pid)" ]; then
+                echo "traffic loop already running (pid $(cat /tmp/traffic.pid)), not starting another" >&2
+                exit 0
+              fi
+              echo $$ > /tmp/traffic.pid
+              exec python3 -u /start-traffic.py
               EOF
 
               chmod +x /start-traffic.sh
