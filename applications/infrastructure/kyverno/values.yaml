@@ -1,0 +1,10 @@
+# Admission-controller-only install: the sole purpose of this Application
+# is a verifyImages gate at pod-create time (see
+# verify-thump-images-policy.yaml), not policy reporting, cleanup, or
+# background remediation — so those three controllers stay off.
+backgroundController:
+  enabled: false
+cleanupController:
+  enabled: false
+reportsController:
+  enabled: false

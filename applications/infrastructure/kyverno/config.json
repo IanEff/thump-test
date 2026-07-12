@@ -1,0 +1,6 @@
+{
+    "appName": "kyverno",
+    "syncWave": "40",
+    "namespace": "kyverno",
+    "localPath": "applications/infrastructure/kyverno"
+}
