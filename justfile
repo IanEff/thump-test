@@ -90,6 +90,18 @@ tunnel:
 gen-slos:
     provisioning/scripts/gen_slos.sh
 
+# Scale s3-traffic-generator to n replicas and start the loop on every pod.
+# `rollout status` returns as soon as containers are running, ahead of the
+# CRI catching up — an exec right after can 500 with "container not found";
+# `kubectl wait --for=condition=ready` closes that race. /start-traffic.sh
+# never returns, so it's launched nohup'd and backgrounded inside the exec
+# session — the session can then close without SIGHUPing it.
+generate-traffic n:
+    kubectl scale deployment/s3-traffic-generator -n default --replicas={{n}}
+    kubectl rollout status deployment/s3-traffic-generator -n default --timeout=120s
+    kubectl wait pod -n default -l app=s3-traffic-generator --for=condition=ready --timeout=120s
+    for pod in $(kubectl get pods -n default -l app=s3-traffic-generator -o jsonpath='{.items[*].metadata.name}'); do echo "starting traffic on $pod"; kubectl exec -n default "$pod" -- sh -c 'nohup /start-traffic.sh > /dev/null 2>&1 &'; done
+
 # DESTRUCTIVE: wipes all Rook Ceph resources + zeroes OSD disks, without
 # rebuilding VMs. Use to reinstall Rook without a full tofu destroy/apply cycle.
 wipe-ceph-disks:
