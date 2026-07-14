@@ -312,7 +312,26 @@ justfile
     list --service=compute.googleapis.com --project=<id>` for current
     usage/limit before assuming the machine-type default itself needs to
     change.
-17. **Kyverno (admission-controller-only, Enforce mode as of 2026-07-12).**
+17. **Kyverno (admission-controller-only) — currently disabled (since
+    2026-07-13), not installed on the live cluster.** The app definition
+    below (Enforce mode as of 2026-07-12) is still accurate for what
+    redeploys if it's re-enabled, but as of this writing
+    `applications/infrastructure/kyverno/config.json` has been renamed to
+    `config.json.disabled` (see `_disabled` key inside it for the dated
+    reason), which drops it out of `infra-set.yaml`'s
+    `applications/infrastructure/**/config.json` glob entirely — the
+    ApplicationSet controller then deletes the generated `kyverno`
+    Application, cascading to a full uninstall (confirmed live: `kubectl
+    get ns kyverno` / `kubectl get application kyverno -n argocd` both
+    404). Reason: this cluster doubles as `thump`'s ephemeral Tilt
+    dev-loop target, and the `verify-thump-images-policy` ClusterPolicy
+    (Enforce, unsigned-tag-blocking) rejects every `tilt up`-built
+    `tilt-*`-tagged pod — fine for the attestation-testing beats it was
+    built to gate, not fine as a standing dev-loop obstruction. To
+    re-enable: rename `config.json.disabled` back to `config.json` (all
+    manifests below are untouched) and let ArgoCD pick it back up, or
+    `git mv` + commit + push if the disable was itself committed (it was,
+    same commit that added the `_disabled` note).
     `applications/infrastructure/kyverno/` (sync-wave 40, same tier as
     chaos-mesh) installs the upstream `kyverno/kyverno` chart v3.8.2 via
     `helmCharts:` in `kustomization.yaml` — not vendored, fetched live by
@@ -380,6 +399,36 @@ justfile
     the chaos-mesh precedent (gotcha #10) — no per-namespace CNP exists
     there either, and no cluster-wide default-deny exists in
     `applications/infrastructure/l7-policies/`.
+18. **`rook-cluster`, `s3-traffic-generator`, and every `infra-set.yaml`
+    app (e.g. `ceph-latency-bridge`) carry an explicit `retry: {limit: 10,
+    backoff: 10s/×2/max 3m}` — don't strip it as boilerplate.** Confirmed
+    live (2026-07-14): on a fresh `just up`, `rook-cluster`'s wave-25 sync
+    fired ~23s before `rook-operator`'s `CephCluster` CRD (wave 20) finished
+    registering, hit ArgoCD's bare default retry budget (5 attempts, ~2.5m
+    window), and gave up *permanently* — no further retry, and no selfHeal
+    to correct it after the fact (both `rook-cluster` and
+    `s3-traffic-generator` deliberately run `selfHeal: false`, see their
+    own gotchas above). Net effect: the `CephCluster` CR was simply never
+    created, and every downstream app (`rook-storage`'s pools/RGW,
+    `rook-gateway`'s HTTPRoutes) sat in `Progressing`/`Degraded` for the
+    cluster's entire uptime with no real mon/osd pods ever starting — this
+    looks exactly like "the cluster's slow to reconcile" but isn't a
+    timing issue at all, it's ArgoCD having already given up. Same failure
+    mode hits `ceph-latency-bridge` (its `ServiceMonitor` racing
+    `prometheus-operator-crds`) and `s3-traffic-generator` (its OBC racing
+    `rook-storage`'s `CephObjectStore`) — `rook-set.yaml` already had this
+    mitigation (added for a `rook-dashboards`/`PrometheusRule` instance of
+    the identical race, see the comment there), it just hadn't been
+    ported to the other three app definitions until now. **If an app ever
+    sits at `SyncError`/`Missing` with `"one or more synchronization tasks
+    are not valid (retried N times)"` in `status.conditions` for more than
+    a few minutes after standup, check whether its retry budget actually
+    covers the CRD-registration race before assuming something is
+    stuck-but-progressing** — `status.operationState.phase: Failed` with a
+    maxed `retryCount` means it isn't going to resolve itself, only a new
+    commit or a manual `argocd app sync`/resync will unstick it. Per this
+    repo's own rule (see Notes below), the durable fix is the retry budget
+    in git, not a one-off manual resync against the live cluster.
 
 ## Everything else in `applications/` (Rook, Cilium base config, Sloth, l7-policies, dashboards)
 

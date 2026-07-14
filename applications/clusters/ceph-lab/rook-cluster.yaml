@@ -28,6 +28,20 @@ spec:
       - CreateNamespace=true
       - ServerSideApply=true
       - RespectIgnoreDifferences=true
+    # CephCluster CRD (installed by rook-operator, wave 20) sometimes isn't
+    # Established yet when this app's wave-25 sync fires — same race
+    # rook-set.yaml documents for PrometheusRule/ServiceMonitor CRDs.
+    # ArgoCD's bare default retry (limit 5, ~2.5m window) isn't enough
+    # margin and there's no selfHeal here to correct it after the fact:
+    # once retries exhaust for a revision, ArgoCD gives up permanently and
+    # the CephCluster CR is simply never created. Match rook-set's longer
+    # backoff so the initial sync survives the CRD-registration race.
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
   ignoreDifferences:
     # The Rook operator updates these fields — don't flag as drift
     - group: ceph.rook.io

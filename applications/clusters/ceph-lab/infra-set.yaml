@@ -32,3 +32,15 @@ spec:
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true
+        # Same CRD-registration race rook-set.yaml documents (a ServiceMonitor/
+        # PrometheusRule losing the race against prometheus-operator-crds, or
+        # a rook-ceph-namespaced resource losing the race against rook-cluster):
+        # ceph-latency-bridge ships a ServiceMonitor and has hit exactly this.
+        # selfHeal:true alone doesn't help — it only corrects drift on an
+        # already-synced app, it doesn't retry an abandoned initial sync.
+        retry:
+          limit: 10
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 3m

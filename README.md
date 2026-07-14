@@ -25,7 +25,7 @@ target a remote kubecontext and it works the same way (see
 | Networking | Cilium (CNI, Gateway API ingress, Hubble for flow visibility) |
 | Observability | Prometheus + Grafana + Sloth-generated SLO alerting |
 | Chaos | Chaos Mesh — Pod/Network/IO chaos experiments against live Ceph daemons |
-| Policy | Kyverno — admission-time image-signature verification (Audit mode) |
+| Policy | Kyverno — admission-time image-signature verification (currently disabled; see CLAUDE.md gotcha #17) |
 
 Everything under `applications/`/`cluster-bootstrap/` is GitOps config
 vendored from a sibling Lima-VM-based project (`ceph-lab`); only the

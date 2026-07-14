@@ -38,6 +38,17 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+    # Wave-40 sync can fire before rook-storage's CephObjectStore/
+    # StorageClass (the ObjectBucketClaim's dependency) is ready — same
+    # CRD/dependency-registration race rook-set.yaml documents. No selfHeal
+    # here to correct a permanently-abandoned initial sync after the fact,
+    # so give it the same longer retry budget.
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
   ignoreDifferences:
     - group: apps
       kind: Deployment
