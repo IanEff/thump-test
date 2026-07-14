@@ -1,0 +1,6 @@
+{
+    "appName": "sloth",
+    "syncWave": "-5",
+    "namespace": "monitoring",
+    "localPath": "applications/infrastructure/sloth"
+}

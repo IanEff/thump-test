@@ -1,10 +1,12 @@
 # BUILD-TIME SPEC, NOT A LIVE K8S OBJECT — the Sloth runtime chart (and its
-# CRDs) were retired from this cluster: the standalone `prometheus` chart
-# reads no monitoring.coreos.com CRs, so a live Sloth controller generating
-# PrometheusRule CRs nobody consumes was pure overhead. This CRD-shaped YAML
-# is now only an input to `sloth generate` (provisioning/scripts/gen_slos.sh
-# / `just gen-slos`), which renders it to plain rule groups embedded in
-# applications/infrastructure/prometheus/values.yaml. Edit this file, run
+# CRDs) are still retired from this cluster: no live Sloth controller runs,
+# so this CRD-shaped YAML is only an input to `sloth generate`
+# (provisioning/scripts/gen_slos.sh / `just gen-slos`), which renders it to a
+# real PrometheusRule CR (applications/infrastructure/sloth/prometheusrule.yaml)
+# that the Prometheus Operator (kube-prometheus-stack, wave -5) actually
+# watches and loads — no controller needed for that part, just the CRD
+# (installed by prometheus-operator-crds, wave -6) and the Operator's own
+# reconciliation of the Prometheus CR's ruleSelector. Edit this file, run
 # `just gen-slos`, commit both.
 #
 # sloth_id is NOT metadata.name — Sloth computes it as "{spec.service}-{slo.name}"
