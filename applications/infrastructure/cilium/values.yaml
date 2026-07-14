@@ -64,6 +64,11 @@ gatewayAPI:
 # and SYS_ADMIN explicitly too (not just NET_BIND_SERVICE): Helm merges this
 # list by full replacement, not by appending, so omitting them would silently
 # drop capabilities the chart's default already required.
+# envoy.serviceMonitor covers both cilium-envoy _and_ cilium-agent-with-Envoy
+# metrics (chart-documented behavior). Previously only reachable via the old
+# standalone Prometheus chart's annotation-based auto-discovery
+# (kubernetes-service-endpoints), which kube-prometheus-stack does not ship
+# by default — a real ServiceMonitor replaces that now the operator is live.
 envoy:
   securityContext:
     capabilities:
@@ -72,6 +77,20 @@ envoy:
         - SYS_ADMIN
         - NET_BIND_SERVICE
       keepCapNetBindService: true
+  prometheus:
+    serviceMonitor:
+      enabled: true
+
+# The chart's validate.yaml template refuses to render any ServiceMonitor
+# (hubble.metrics, operator.prometheus, envoy.prometheus, or this key) unless
+# prometheus.serviceMonitor.trustCRDsExist is true — it can't check the live
+# cluster for the CRD at `helm template`/kustomize-build time the way a real
+# `helm install` against a live API server could. prometheus-operator-crds
+# (wave -6) always installs the CRD before this app (wave -5) reconciles, so
+# this is safe to assert unconditionally.
+prometheus:
+  serviceMonitor:
+    trustCRDsExist: true
 
 ipam:
   operator:
@@ -81,6 +100,10 @@ operator:
   replicas: 1
   dashboards:
     enabled: false
+  prometheus:
+    serviceMonitor:
+      # See hubble.metrics.serviceMonitor below — same reasoning.
+      enabled: true
 
 hubble:
   enabled: true
@@ -103,8 +126,12 @@ hubble:
     dashboards:
       enabled: false
     serviceMonitor:
-      # Disabled at bootstrap; enabled once Prometheus CRDs are established
-      enabled: false
+      # Was disabled at bootstrap pending a real operator to consume it — the
+      # CRDs existed (prometheus-operator-crds) but nothing watched them.
+      # kube-prometheus-stack (applications/infrastructure/prometheus) now
+      # does, with serviceMonitorSelectorNilUsesHelmValues: false, so this
+      # ServiceMonitor is picked up cluster-wide the moment it's created.
+      enabled: true
   relay:
     enabled: true
   ui:

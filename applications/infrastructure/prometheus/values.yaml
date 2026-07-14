@@ -1,98 +1,83 @@
-# Standalone Prometheus — single-process, no operator. This chart reads NO
-# monitoring.coreos.com CRs (no ServiceMonitor/PrometheusRule controller is
-# deployed) — all scraping below is static/annotation-based, and Sloth's
-# generated rules are rendered to plain rule groups at commit time (see
-# serverFiles.recording_rules.yml / .alerting_rules.yml below, and
-# provisioning/scripts/gen_slos.sh) rather than picked up live.
+# Full kube-prometheus-stack: Prometheus Operator + Prometheus + Alertmanager
+# + kube-state-metrics + node-exporter, all watching monitoring.coreos.com
+# CRs (ServiceMonitor/PodMonitor/PrometheusRule). CRDs are NOT installed by
+# this chart (crds.enabled: false below) — they're owned by the separate
+# prometheus-operator-crds app (wave -6, ahead of this app's wave -5) so
+# there's exactly one place in ArgoCD that owns them. Grafana ships bundled
+# with this chart too, but stays disabled — applications/infrastructure/grafana/
+# is the standalone app of record; keep its datasource URL in sync with
+# whatever Service name this release renders (see that app's values.yaml).
 
-server:
-  replicaCount: 1
-
-  retention: "7d"
-  retentionSize: "5GB"
-
-  # Use CephFS RWO for metrics storage.
-  persistentVolume:
-    enabled: true
-    size: 10Gi
-    storageClass: "local-path"
-
-  # No nodeSelector: ceph-lab's original pinned this to its control node
-  # (`kubernetes.io/hostname: lima-ceph-control`, Lima's fixed VM hostname —
-  # doesn't exist on GCE and left this pod permanently unschedulable). This
-  # repo briefly re-pinned it to `node-role.kubernetes.io/control-plane` for
-  # the same "stable known identity" reason Cilium's Gateway is pinned there
-  # — but control-plane.sh now tuints that node specifically to keep general
-  # workloads like this one off it (see control-plane.sh's node-taint and
-  # CLAUDE.md gotcha #14): a nodeSelector requiring control-plane, with no
-  # matching toleration, made this pod permanently unschedulable all over
-  # again, just via a taint conflict instead of a bad hostname. Prometheus
-  # doesn't actually need a stable/known node identity (unlike the Gateway,
-  # nothing references its IP directly) — let the scheduler place it on
-  # whichever worker has room.
-
-  resources:
-    requests:
-      cpu: 100m
-      memory: 256Mi
-    limits:
-      cpu: 500m
-      memory: 1Gi
-
-  global:
-    scrape_interval: 30s
-    scrape_timeout: 10s
-    evaluation_interval: 30s
-
-  # Emit cluster label on all series for multi-cluster Grafana queries.
-  extraScrapeConfigs: |
-    - job_name: 'prometheus-self'
-      static_configs:
-        - targets: ['localhost:9090']
-
-alertmanager:
-  enabled: false # Lab: no paging. Use Grafana unified alerting instead.
-
-# node-exporter and kube-state-metrics are included in the chart.
-prometheus-node-exporter:
-  enabled: true
-  resources:
-    requests:
-      cpu: 20m
-      memory: 32Mi
-    limits:
-      cpu: 100m
-      memory: 64Mi
-
-kube-state-metrics:
-  enabled: true
-  resources:
-    requests:
-      cpu: 50m
-      memory: 64Mi
-    limits:
-      cpu: 200m
-      memory: 256Mi
-
-# pushgateway not needed in a lab.
-prometheus-pushgateway:
+crds:
   enabled: false
 
-# serverFiles keys become files in the server ConfigMap, mounted at
-# /etc/config/. There is no ServiceMonitor/PrometheusRule discovery here —
-# see the header comment above.
-serverFiles:
-  prometheus.yml:
-    rule_files:
-      - /etc/config/recording_rules.yml
-      - /etc/config/alerting_rules.yml
-    scrape_configs:
-      # The chart's default scrape_configs already cover kubernetes-service-endpoints,
-      # kubernetes-nodes, kubernetes-pods, etc. Only add custom targets below.
+prometheus:
+  prometheusSpec:
+    retention: "7d"
+    scrapeInterval: 30s
+    scrapeTimeout: 10s
+    evaluationInterval: 30s
 
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
 
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
 
-      # Hubble metrics (Cilium flow observability).
+    # No nodeSelector: the control-plane node carries a NoSchedule taint
+    # (CLAUDE.md gotcha #14) and Prometheus needs no stable/known node
+    # identity — let the scheduler place it on whichever worker has room.
+
+    # Pick up every ServiceMonitor/PodMonitor/PrometheusRule cluster-wide,
+    # not just ones carrying this release's chart labels — this is what
+    # actually makes ceph-latency-bridge's ServiceMonitor, rook-dashboards'
+    # PrometheusRule, and Sloth's generated PrometheusRule (previously all
+    # dead CRs — nothing watched monitoring.coreos.com/v1 here before this
+    # chart) take effect.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    scrapeConfigSelectorNilUsesHelmValues: false
+
+    # Targets with no natural ServiceMonitor (no Service/label selector
+    # verified live yet) stay as static scrape configs. ceph-latency-bridge's
+    # own ServiceMonitor (applications/infrastructure/ceph-latency-bridge/
+    # manifests.yaml) replaces what used to be a third static entry here.
+    #
+    # The last two jobs below (kubernetes-pods / kubernetes-service-endpoints)
+    # are a deliberate safety net, not leftover cruft: the old minimal
+    # `prometheus` chart shipped these as *default* jobs, and several things
+    # in this cluster still rely on their prometheus.io/scrape annotations
+    # rather than a ServiceMonitor — confirmed live against the pre-migration
+    # cluster's /api/v1/targets before this change: chaos-mesh's 4 components
+    # (chaos-controller-manager, chaos-daemon, chaos-dns-server,
+    # chaos-dashboard — its chart has no ServiceMonitor support at all, only
+    # a bundled standalone-Prometheus option this repo doesn't use) have no
+    # other path to being scraped. kube-prometheus-stack does not ship these
+    # jobs by default, so without them chaos-mesh's metrics would silently
+    # stop being collected on this migration. Everything else that used to
+    # ride on annotation-discovery (rook-ceph-mgr/rook-ceph-exporter,
+    # cilium-agent/operator/envoy/hubble, node-exporter, kube-state-metrics,
+    # coredns) now has a real ServiceMonitor instead (Rook self-creates its
+    # own; Cilium's serviceMonitor.enabled flags were flipped on in
+    # applications/infrastructure/cilium/values.yaml in this same change;
+    # node-exporter/kube-state-metrics/coreDns are chart-bundled component
+    # monitors) — those will show up under both mechanisms until/unless the
+    # annotations are removed upstream, which is harmless double-scraping,
+    # not a correctness issue.
+    additionalScrapeConfigs: |
       - job_name: "hubble-metrics"
         static_configs:
           - targets:
@@ -101,17 +86,6 @@ serverFiles:
           - target_label: job
             replacement: hubble
 
-      # Ceph Latency Bridge (Native Histogram Reconstruction).
-      - job_name: "ceph-latency-bridge"
-        static_configs:
-          - targets:
-              - "ceph-latency-bridge.rook-ceph.svc.cluster.local:8080"
-        relabel_configs:
-          - target_label: job
-            replacement: ceph-latency-bridge
-
-      # ArgoCD application-controller metrics (argocd_app_info etc.) — needed
-      # by the argocd-sync Sloth SLO.
       - job_name: "argocd-metrics"
         static_configs:
           - targets:
@@ -120,970 +94,139 @@ serverFiles:
           - target_label: job
             replacement: argocd-metrics
 
-  # --- BEGIN sloth-generated recording rules (regenerate: just gen-slos) ---
-  # Source: applications/infrastructure/sloth/prometheusservicelevels.yaml
-  # DO NOT EDIT BY HAND — run `just gen-slos` after changing the source spec.
-  recording_rules.yml:
-    groups:
-      - name: sloth-slo-sli-recordings-ceph-rgw-availability
-        rules:
-          - expr: |
-              (sum(rate(ceph_rgw_failed_req[5m])))
-              /
-              (sum(rate(ceph_rgw_req[5m])))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-availability
-              sloth_service: ceph-rgw
-              sloth_slo: availability
-              sloth_window: 5m
-            record: slo:sli_error:ratio_rate5m
-          - expr: |
-              (sum(rate(ceph_rgw_failed_req[30m])))
-              /
-              (sum(rate(ceph_rgw_req[30m])))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-availability
-              sloth_service: ceph-rgw
-              sloth_slo: availability
-              sloth_window: 30m
-            record: slo:sli_error:ratio_rate30m
-          - expr: |
-              (sum(rate(ceph_rgw_failed_req[1h])))
-              /
-              (sum(rate(ceph_rgw_req[1h])))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-availability
-              sloth_service: ceph-rgw
-              sloth_slo: availability
-              sloth_window: 1h
-            record: slo:sli_error:ratio_rate1h
-          - expr: |
-              (sum(rate(ceph_rgw_failed_req[2h])))
-              /
-              (sum(rate(ceph_rgw_req[2h])))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-availability
-              sloth_service: ceph-rgw
-              sloth_slo: availability
-              sloth_window: 2h
-            record: slo:sli_error:ratio_rate2h
-          - expr: |
-              (sum(rate(ceph_rgw_failed_req[6h])))
-              /
-              (sum(rate(ceph_rgw_req[6h])))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-availability
-              sloth_service: ceph-rgw
-              sloth_slo: availability
-              sloth_window: 6h
-            record: slo:sli_error:ratio_rate6h
-          - expr: |
-              (sum(rate(ceph_rgw_failed_req[1d])))
-              /
-              (sum(rate(ceph_rgw_req[1d])))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-availability
-              sloth_service: ceph-rgw
-              sloth_slo: availability
-              sloth_window: 1d
-            record: slo:sli_error:ratio_rate1d
-          - expr: |
-              (sum(rate(ceph_rgw_failed_req[3d])))
-              /
-              (sum(rate(ceph_rgw_req[3d])))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-availability
-              sloth_service: ceph-rgw
-              sloth_slo: availability
-              sloth_window: 3d
-            record: slo:sli_error:ratio_rate3d
-          - expr: |
-              sum_over_time(slo:sli_error:ratio_rate5m{sloth_id="ceph-rgw-availability", sloth_service="ceph-rgw", sloth_slo="availability"}[30d])
-              / ignoring (sloth_window)
-              count_over_time(slo:sli_error:ratio_rate5m{sloth_id="ceph-rgw-availability", sloth_service="ceph-rgw", sloth_slo="availability"}[30d])
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-availability
-              sloth_service: ceph-rgw
-              sloth_slo: availability
-              sloth_window: 30d
-            record: slo:sli_error:ratio_rate30d
-      - name: sloth-slo-meta-recordings-ceph-rgw-availability
-        rules:
-          - expr: vector(0.9990000000000001)
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-availability
-              sloth_service: ceph-rgw
-              sloth_slo: availability
-            record: slo:objective:ratio
-          - expr: vector(1-0.9990000000000001)
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-availability
-              sloth_service: ceph-rgw
-              sloth_slo: availability
-            record: slo:error_budget:ratio
-          - expr: vector(30)
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-availability
-              sloth_service: ceph-rgw
-              sloth_slo: availability
-            record: slo:time_period:days
-          - expr: |
-              slo:sli_error:ratio_rate5m{sloth_id="ceph-rgw-availability", sloth_service="ceph-rgw", sloth_slo="availability"}
-              / on(sloth_id, sloth_slo, sloth_service) group_left
-              slo:error_budget:ratio{sloth_id="ceph-rgw-availability", sloth_service="ceph-rgw", sloth_slo="availability"}
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-availability
-              sloth_service: ceph-rgw
-              sloth_slo: availability
-            record: slo:current_burn_rate:ratio
-          - expr: |
-              slo:sli_error:ratio_rate30d{sloth_id="ceph-rgw-availability", sloth_service="ceph-rgw", sloth_slo="availability"}
-              / on(sloth_id, sloth_slo, sloth_service) group_left
-              slo:error_budget:ratio{sloth_id="ceph-rgw-availability", sloth_service="ceph-rgw", sloth_slo="availability"}
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-availability
-              sloth_service: ceph-rgw
-              sloth_slo: availability
-            record: slo:period_burn_rate:ratio
-          - expr: 1 - slo:period_burn_rate:ratio{sloth_id="ceph-rgw-availability", sloth_service="ceph-rgw", sloth_slo="availability"}
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-availability
-              sloth_service: ceph-rgw
-              sloth_slo: availability
-            record: slo:period_error_budget_remaining:ratio
-          - expr: vector(1)
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-availability
-              sloth_mode: cli-gen-k8s
-              sloth_objective: "99.9"
-              sloth_service: ceph-rgw
-              sloth_slo: availability
-              sloth_spec: sloth.slok.dev/v1
-              sloth_version: 0.16.0
-            record: sloth_slo_info
-      - name: sloth-slo-sli-recordings-ceph-rgw-saturation
-        rules:
-          - expr: |-
-              (avg_over_time(
-                (
-                  (
-                    (sum(rate(ceph_rgw_op_get_obj_lat_sum[1m])) + sum(rate(ceph_rgw_op_put_obj_lat_sum[1m])))
-                    /
-                    (sum(rate(ceph_rgw_op_get_obj_lat_count[1m])) + sum(rate(ceph_rgw_op_put_obj_lat_count[1m])))
-                  ) > bool 0.15
-                )[5m:1m]
-              ))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-saturation
-              sloth_service: ceph-rgw
-              sloth_slo: saturation
-              sloth_window: 5m
-            record: slo:sli_error:ratio_rate5m
-          - expr: |-
-              (avg_over_time(
-                (
-                  (
-                    (sum(rate(ceph_rgw_op_get_obj_lat_sum[1m])) + sum(rate(ceph_rgw_op_put_obj_lat_sum[1m])))
-                    /
-                    (sum(rate(ceph_rgw_op_get_obj_lat_count[1m])) + sum(rate(ceph_rgw_op_put_obj_lat_count[1m])))
-                  ) > bool 0.15
-                )[30m:1m]
-              ))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-saturation
-              sloth_service: ceph-rgw
-              sloth_slo: saturation
-              sloth_window: 30m
-            record: slo:sli_error:ratio_rate30m
-          - expr: |-
-              (avg_over_time(
-                (
-                  (
-                    (sum(rate(ceph_rgw_op_get_obj_lat_sum[1m])) + sum(rate(ceph_rgw_op_put_obj_lat_sum[1m])))
-                    /
-                    (sum(rate(ceph_rgw_op_get_obj_lat_count[1m])) + sum(rate(ceph_rgw_op_put_obj_lat_count[1m])))
-                  ) > bool 0.15
-                )[1h:1m]
-              ))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-saturation
-              sloth_service: ceph-rgw
-              sloth_slo: saturation
-              sloth_window: 1h
-            record: slo:sli_error:ratio_rate1h
-          - expr: |-
-              (avg_over_time(
-                (
-                  (
-                    (sum(rate(ceph_rgw_op_get_obj_lat_sum[1m])) + sum(rate(ceph_rgw_op_put_obj_lat_sum[1m])))
-                    /
-                    (sum(rate(ceph_rgw_op_get_obj_lat_count[1m])) + sum(rate(ceph_rgw_op_put_obj_lat_count[1m])))
-                  ) > bool 0.15
-                )[2h:1m]
-              ))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-saturation
-              sloth_service: ceph-rgw
-              sloth_slo: saturation
-              sloth_window: 2h
-            record: slo:sli_error:ratio_rate2h
-          - expr: |-
-              (avg_over_time(
-                (
-                  (
-                    (sum(rate(ceph_rgw_op_get_obj_lat_sum[1m])) + sum(rate(ceph_rgw_op_put_obj_lat_sum[1m])))
-                    /
-                    (sum(rate(ceph_rgw_op_get_obj_lat_count[1m])) + sum(rate(ceph_rgw_op_put_obj_lat_count[1m])))
-                  ) > bool 0.15
-                )[6h:1m]
-              ))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-saturation
-              sloth_service: ceph-rgw
-              sloth_slo: saturation
-              sloth_window: 6h
-            record: slo:sli_error:ratio_rate6h
-          - expr: |-
-              (avg_over_time(
-                (
-                  (
-                    (sum(rate(ceph_rgw_op_get_obj_lat_sum[1m])) + sum(rate(ceph_rgw_op_put_obj_lat_sum[1m])))
-                    /
-                    (sum(rate(ceph_rgw_op_get_obj_lat_count[1m])) + sum(rate(ceph_rgw_op_put_obj_lat_count[1m])))
-                  ) > bool 0.15
-                )[1d:1m]
-              ))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-saturation
-              sloth_service: ceph-rgw
-              sloth_slo: saturation
-              sloth_window: 1d
-            record: slo:sli_error:ratio_rate1d
-          - expr: |-
-              (avg_over_time(
-                (
-                  (
-                    (sum(rate(ceph_rgw_op_get_obj_lat_sum[1m])) + sum(rate(ceph_rgw_op_put_obj_lat_sum[1m])))
-                    /
-                    (sum(rate(ceph_rgw_op_get_obj_lat_count[1m])) + sum(rate(ceph_rgw_op_put_obj_lat_count[1m])))
-                  ) > bool 0.15
-                )[3d:1m]
-              ))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-saturation
-              sloth_service: ceph-rgw
-              sloth_slo: saturation
-              sloth_window: 3d
-            record: slo:sli_error:ratio_rate3d
-          - expr: |
-              sum_over_time(slo:sli_error:ratio_rate5m{sloth_id="ceph-rgw-saturation", sloth_service="ceph-rgw", sloth_slo="saturation"}[30d])
-              / ignoring (sloth_window)
-              count_over_time(slo:sli_error:ratio_rate5m{sloth_id="ceph-rgw-saturation", sloth_service="ceph-rgw", sloth_slo="saturation"}[30d])
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-saturation
-              sloth_service: ceph-rgw
-              sloth_slo: saturation
-              sloth_window: 30d
-            record: slo:sli_error:ratio_rate30d
-      - name: sloth-slo-meta-recordings-ceph-rgw-saturation
-        rules:
-          - expr: vector(0.99)
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-saturation
-              sloth_service: ceph-rgw
-              sloth_slo: saturation
-            record: slo:objective:ratio
-          - expr: vector(1-0.99)
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-saturation
-              sloth_service: ceph-rgw
-              sloth_slo: saturation
-            record: slo:error_budget:ratio
-          - expr: vector(30)
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-saturation
-              sloth_service: ceph-rgw
-              sloth_slo: saturation
-            record: slo:time_period:days
-          - expr: |
-              slo:sli_error:ratio_rate5m{sloth_id="ceph-rgw-saturation", sloth_service="ceph-rgw", sloth_slo="saturation"}
-              / on(sloth_id, sloth_slo, sloth_service) group_left
-              slo:error_budget:ratio{sloth_id="ceph-rgw-saturation", sloth_service="ceph-rgw", sloth_slo="saturation"}
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-saturation
-              sloth_service: ceph-rgw
-              sloth_slo: saturation
-            record: slo:current_burn_rate:ratio
-          - expr: |
-              slo:sli_error:ratio_rate30d{sloth_id="ceph-rgw-saturation", sloth_service="ceph-rgw", sloth_slo="saturation"}
-              / on(sloth_id, sloth_slo, sloth_service) group_left
-              slo:error_budget:ratio{sloth_id="ceph-rgw-saturation", sloth_service="ceph-rgw", sloth_slo="saturation"}
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-saturation
-              sloth_service: ceph-rgw
-              sloth_slo: saturation
-            record: slo:period_burn_rate:ratio
-          - expr: 1 - slo:period_burn_rate:ratio{sloth_id="ceph-rgw-saturation", sloth_service="ceph-rgw", sloth_slo="saturation"}
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-saturation
-              sloth_service: ceph-rgw
-              sloth_slo: saturation
-            record: slo:period_error_budget_remaining:ratio
-          - expr: vector(1)
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-rgw-saturation
-              sloth_mode: cli-gen-k8s
-              sloth_objective: "99"
-              sloth_service: ceph-rgw
-              sloth_slo: saturation
-              sloth_spec: sloth.slok.dev/v1
-              sloth_version: 0.16.0
-            record: sloth_slo_info
-      - name: sloth-slo-sli-recordings-ceph-osd-latency
-        rules:
-          - expr: |
-              (sum(rate(ceph_osd_op_w_latency_count{job="ceph-latency-bridge"}[5m])) - sum(rate(ceph_osd_op_w_latency_bucket{job="ceph-latency-bridge",le="102.399999"}[5m])))
-              /
-              (sum(rate(ceph_osd_op_w_latency_count{job="ceph-latency-bridge"}[5m])))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-osd-latency
-              sloth_service: ceph-osd
-              sloth_slo: latency
-              sloth_window: 5m
-            record: slo:sli_error:ratio_rate5m
-          - expr: |
-              (sum(rate(ceph_osd_op_w_latency_count{job="ceph-latency-bridge"}[30m])) - sum(rate(ceph_osd_op_w_latency_bucket{job="ceph-latency-bridge",le="102.399999"}[30m])))
-              /
-              (sum(rate(ceph_osd_op_w_latency_count{job="ceph-latency-bridge"}[30m])))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-osd-latency
-              sloth_service: ceph-osd
-              sloth_slo: latency
-              sloth_window: 30m
-            record: slo:sli_error:ratio_rate30m
-          - expr: |
-              (sum(rate(ceph_osd_op_w_latency_count{job="ceph-latency-bridge"}[1h])) - sum(rate(ceph_osd_op_w_latency_bucket{job="ceph-latency-bridge",le="102.399999"}[1h])))
-              /
-              (sum(rate(ceph_osd_op_w_latency_count{job="ceph-latency-bridge"}[1h])))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-osd-latency
-              sloth_service: ceph-osd
-              sloth_slo: latency
-              sloth_window: 1h
-            record: slo:sli_error:ratio_rate1h
-          - expr: |
-              (sum(rate(ceph_osd_op_w_latency_count{job="ceph-latency-bridge"}[2h])) - sum(rate(ceph_osd_op_w_latency_bucket{job="ceph-latency-bridge",le="102.399999"}[2h])))
-              /
-              (sum(rate(ceph_osd_op_w_latency_count{job="ceph-latency-bridge"}[2h])))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-osd-latency
-              sloth_service: ceph-osd
-              sloth_slo: latency
-              sloth_window: 2h
-            record: slo:sli_error:ratio_rate2h
-          - expr: |
-              (sum(rate(ceph_osd_op_w_latency_count{job="ceph-latency-bridge"}[6h])) - sum(rate(ceph_osd_op_w_latency_bucket{job="ceph-latency-bridge",le="102.399999"}[6h])))
-              /
-              (sum(rate(ceph_osd_op_w_latency_count{job="ceph-latency-bridge"}[6h])))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-osd-latency
-              sloth_service: ceph-osd
-              sloth_slo: latency
-              sloth_window: 6h
-            record: slo:sli_error:ratio_rate6h
-          - expr: |
-              (sum(rate(ceph_osd_op_w_latency_count{job="ceph-latency-bridge"}[1d])) - sum(rate(ceph_osd_op_w_latency_bucket{job="ceph-latency-bridge",le="102.399999"}[1d])))
-              /
-              (sum(rate(ceph_osd_op_w_latency_count{job="ceph-latency-bridge"}[1d])))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-osd-latency
-              sloth_service: ceph-osd
-              sloth_slo: latency
-              sloth_window: 1d
-            record: slo:sli_error:ratio_rate1d
-          - expr: |
-              (sum(rate(ceph_osd_op_w_latency_count{job="ceph-latency-bridge"}[3d])) - sum(rate(ceph_osd_op_w_latency_bucket{job="ceph-latency-bridge",le="102.399999"}[3d])))
-              /
-              (sum(rate(ceph_osd_op_w_latency_count{job="ceph-latency-bridge"}[3d])))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-osd-latency
-              sloth_service: ceph-osd
-              sloth_slo: latency
-              sloth_window: 3d
-            record: slo:sli_error:ratio_rate3d
-          - expr: |
-              sum_over_time(slo:sli_error:ratio_rate5m{sloth_id="ceph-osd-latency", sloth_service="ceph-osd", sloth_slo="latency"}[30d])
-              / ignoring (sloth_window)
-              count_over_time(slo:sli_error:ratio_rate5m{sloth_id="ceph-osd-latency", sloth_service="ceph-osd", sloth_slo="latency"}[30d])
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-osd-latency
-              sloth_service: ceph-osd
-              sloth_slo: latency
-              sloth_window: 30d
-            record: slo:sli_error:ratio_rate30d
-      - name: sloth-slo-meta-recordings-ceph-osd-latency
-        rules:
-          - expr: vector(0.99)
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-osd-latency
-              sloth_service: ceph-osd
-              sloth_slo: latency
-            record: slo:objective:ratio
-          - expr: vector(1-0.99)
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-osd-latency
-              sloth_service: ceph-osd
-              sloth_slo: latency
-            record: slo:error_budget:ratio
-          - expr: vector(30)
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-osd-latency
-              sloth_service: ceph-osd
-              sloth_slo: latency
-            record: slo:time_period:days
-          - expr: |
-              slo:sli_error:ratio_rate5m{sloth_id="ceph-osd-latency", sloth_service="ceph-osd", sloth_slo="latency"}
-              / on(sloth_id, sloth_slo, sloth_service) group_left
-              slo:error_budget:ratio{sloth_id="ceph-osd-latency", sloth_service="ceph-osd", sloth_slo="latency"}
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-osd-latency
-              sloth_service: ceph-osd
-              sloth_slo: latency
-            record: slo:current_burn_rate:ratio
-          - expr: |
-              slo:sli_error:ratio_rate30d{sloth_id="ceph-osd-latency", sloth_service="ceph-osd", sloth_slo="latency"}
-              / on(sloth_id, sloth_slo, sloth_service) group_left
-              slo:error_budget:ratio{sloth_id="ceph-osd-latency", sloth_service="ceph-osd", sloth_slo="latency"}
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-osd-latency
-              sloth_service: ceph-osd
-              sloth_slo: latency
-            record: slo:period_burn_rate:ratio
-          - expr: 1 - slo:period_burn_rate:ratio{sloth_id="ceph-osd-latency", sloth_service="ceph-osd", sloth_slo="latency"}
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-osd-latency
-              sloth_service: ceph-osd
-              sloth_slo: latency
-            record: slo:period_error_budget_remaining:ratio
-          - expr: vector(1)
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-osd-latency
-              sloth_mode: cli-gen-k8s
-              sloth_objective: "99"
-              sloth_service: ceph-osd
-              sloth_slo: latency
-              sloth_spec: sloth.slok.dev/v1
-              sloth_version: 0.16.0
-            record: sloth_slo_info
-      - name: sloth-slo-sli-recordings-ceph-health
-        rules:
-          - expr: (max(avg_over_time(clamp_max(ceph_health_status, 1)[5m:1m])))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-health
-              sloth_service: ceph
-              sloth_slo: health
-              sloth_window: 5m
-            record: slo:sli_error:ratio_rate5m
-          - expr: (max(avg_over_time(clamp_max(ceph_health_status, 1)[30m:1m])))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-health
-              sloth_service: ceph
-              sloth_slo: health
-              sloth_window: 30m
-            record: slo:sli_error:ratio_rate30m
-          - expr: (max(avg_over_time(clamp_max(ceph_health_status, 1)[1h:1m])))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-health
-              sloth_service: ceph
-              sloth_slo: health
-              sloth_window: 1h
-            record: slo:sli_error:ratio_rate1h
-          - expr: (max(avg_over_time(clamp_max(ceph_health_status, 1)[2h:1m])))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-health
-              sloth_service: ceph
-              sloth_slo: health
-              sloth_window: 2h
-            record: slo:sli_error:ratio_rate2h
-          - expr: (max(avg_over_time(clamp_max(ceph_health_status, 1)[6h:1m])))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-health
-              sloth_service: ceph
-              sloth_slo: health
-              sloth_window: 6h
-            record: slo:sli_error:ratio_rate6h
-          - expr: (max(avg_over_time(clamp_max(ceph_health_status, 1)[1d:1m])))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-health
-              sloth_service: ceph
-              sloth_slo: health
-              sloth_window: 1d
-            record: slo:sli_error:ratio_rate1d
-          - expr: (max(avg_over_time(clamp_max(ceph_health_status, 1)[3d:1m])))
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-health
-              sloth_service: ceph
-              sloth_slo: health
-              sloth_window: 3d
-            record: slo:sli_error:ratio_rate3d
-          - expr: |
-              sum_over_time(slo:sli_error:ratio_rate5m{sloth_id="ceph-health", sloth_service="ceph", sloth_slo="health"}[30d])
-              / ignoring (sloth_window)
-              count_over_time(slo:sli_error:ratio_rate5m{sloth_id="ceph-health", sloth_service="ceph", sloth_slo="health"}[30d])
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-health
-              sloth_service: ceph
-              sloth_slo: health
-              sloth_window: 30d
-            record: slo:sli_error:ratio_rate30d
-      - name: sloth-slo-meta-recordings-ceph-health
-        rules:
-          - expr: vector(0.9990000000000001)
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-health
-              sloth_service: ceph
-              sloth_slo: health
-            record: slo:objective:ratio
-          - expr: vector(1-0.9990000000000001)
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-health
-              sloth_service: ceph
-              sloth_slo: health
-            record: slo:error_budget:ratio
-          - expr: vector(30)
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-health
-              sloth_service: ceph
-              sloth_slo: health
-            record: slo:time_period:days
-          - expr: |
-              slo:sli_error:ratio_rate5m{sloth_id="ceph-health", sloth_service="ceph", sloth_slo="health"}
-              / on(sloth_id, sloth_slo, sloth_service) group_left
-              slo:error_budget:ratio{sloth_id="ceph-health", sloth_service="ceph", sloth_slo="health"}
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-health
-              sloth_service: ceph
-              sloth_slo: health
-            record: slo:current_burn_rate:ratio
-          - expr: |
-              slo:sli_error:ratio_rate30d{sloth_id="ceph-health", sloth_service="ceph", sloth_slo="health"}
-              / on(sloth_id, sloth_slo, sloth_service) group_left
-              slo:error_budget:ratio{sloth_id="ceph-health", sloth_service="ceph", sloth_slo="health"}
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-health
-              sloth_service: ceph
-              sloth_slo: health
-            record: slo:period_burn_rate:ratio
-          - expr: 1 - slo:period_burn_rate:ratio{sloth_id="ceph-health", sloth_service="ceph", sloth_slo="health"}
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-health
-              sloth_service: ceph
-              sloth_slo: health
-            record: slo:period_error_budget_remaining:ratio
-          - expr: vector(1)
-            labels:
-              lab: ceph-lab
-              sloth_id: ceph-health
-              sloth_mode: cli-gen-k8s
-              sloth_objective: "99.9"
-              sloth_service: ceph
-              sloth_slo: health
-              sloth_spec: sloth.slok.dev/v1
-              sloth_version: 0.16.0
-            record: sloth_slo_info
-      - name: sloth-slo-sli-recordings-argocd-sync
-        rules:
-          - expr: (avg_over_time((count(argocd_app_info{sync_status!="Synced"}) or vector(0))[5m:1m]) / avg_over_time(count(argocd_app_info)[5m:1m]))
-            labels:
-              lab: ceph-lab
-              sloth_id: argocd-sync
-              sloth_service: argocd
-              sloth_slo: sync
-              sloth_window: 5m
-            record: slo:sli_error:ratio_rate5m
-          - expr: (avg_over_time((count(argocd_app_info{sync_status!="Synced"}) or vector(0))[30m:1m]) / avg_over_time(count(argocd_app_info)[30m:1m]))
-            labels:
-              lab: ceph-lab
-              sloth_id: argocd-sync
-              sloth_service: argocd
-              sloth_slo: sync
-              sloth_window: 30m
-            record: slo:sli_error:ratio_rate30m
-          - expr: (avg_over_time((count(argocd_app_info{sync_status!="Synced"}) or vector(0))[1h:1m]) / avg_over_time(count(argocd_app_info)[1h:1m]))
-            labels:
-              lab: ceph-lab
-              sloth_id: argocd-sync
-              sloth_service: argocd
-              sloth_slo: sync
-              sloth_window: 1h
-            record: slo:sli_error:ratio_rate1h
-          - expr: (avg_over_time((count(argocd_app_info{sync_status!="Synced"}) or vector(0))[2h:1m]) / avg_over_time(count(argocd_app_info)[2h:1m]))
-            labels:
-              lab: ceph-lab
-              sloth_id: argocd-sync
-              sloth_service: argocd
-              sloth_slo: sync
-              sloth_window: 2h
-            record: slo:sli_error:ratio_rate2h
-          - expr: (avg_over_time((count(argocd_app_info{sync_status!="Synced"}) or vector(0))[6h:1m]) / avg_over_time(count(argocd_app_info)[6h:1m]))
-            labels:
-              lab: ceph-lab
-              sloth_id: argocd-sync
-              sloth_service: argocd
-              sloth_slo: sync
-              sloth_window: 6h
-            record: slo:sli_error:ratio_rate6h
-          - expr: (avg_over_time((count(argocd_app_info{sync_status!="Synced"}) or vector(0))[1d:1m]) / avg_over_time(count(argocd_app_info)[1d:1m]))
-            labels:
-              lab: ceph-lab
-              sloth_id: argocd-sync
-              sloth_service: argocd
-              sloth_slo: sync
-              sloth_window: 1d
-            record: slo:sli_error:ratio_rate1d
-          - expr: (avg_over_time((count(argocd_app_info{sync_status!="Synced"}) or vector(0))[3d:1m]) / avg_over_time(count(argocd_app_info)[3d:1m]))
-            labels:
-              lab: ceph-lab
-              sloth_id: argocd-sync
-              sloth_service: argocd
-              sloth_slo: sync
-              sloth_window: 3d
-            record: slo:sli_error:ratio_rate3d
-          - expr: |
-              sum_over_time(slo:sli_error:ratio_rate5m{sloth_id="argocd-sync", sloth_service="argocd", sloth_slo="sync"}[30d])
-              / ignoring (sloth_window)
-              count_over_time(slo:sli_error:ratio_rate5m{sloth_id="argocd-sync", sloth_service="argocd", sloth_slo="sync"}[30d])
-            labels:
-              lab: ceph-lab
-              sloth_id: argocd-sync
-              sloth_service: argocd
-              sloth_slo: sync
-              sloth_window: 30d
-            record: slo:sli_error:ratio_rate30d
-      - name: sloth-slo-meta-recordings-argocd-sync
-        rules:
-          - expr: vector(0.99)
-            labels:
-              lab: ceph-lab
-              sloth_id: argocd-sync
-              sloth_service: argocd
-              sloth_slo: sync
-            record: slo:objective:ratio
-          - expr: vector(1-0.99)
-            labels:
-              lab: ceph-lab
-              sloth_id: argocd-sync
-              sloth_service: argocd
-              sloth_slo: sync
-            record: slo:error_budget:ratio
-          - expr: vector(30)
-            labels:
-              lab: ceph-lab
-              sloth_id: argocd-sync
-              sloth_service: argocd
-              sloth_slo: sync
-            record: slo:time_period:days
-          - expr: |
-              slo:sli_error:ratio_rate5m{sloth_id="argocd-sync", sloth_service="argocd", sloth_slo="sync"}
-              / on(sloth_id, sloth_slo, sloth_service) group_left
-              slo:error_budget:ratio{sloth_id="argocd-sync", sloth_service="argocd", sloth_slo="sync"}
-            labels:
-              lab: ceph-lab
-              sloth_id: argocd-sync
-              sloth_service: argocd
-              sloth_slo: sync
-            record: slo:current_burn_rate:ratio
-          - expr: |
-              slo:sli_error:ratio_rate30d{sloth_id="argocd-sync", sloth_service="argocd", sloth_slo="sync"}
-              / on(sloth_id, sloth_slo, sloth_service) group_left
-              slo:error_budget:ratio{sloth_id="argocd-sync", sloth_service="argocd", sloth_slo="sync"}
-            labels:
-              lab: ceph-lab
-              sloth_id: argocd-sync
-              sloth_service: argocd
-              sloth_slo: sync
-            record: slo:period_burn_rate:ratio
-          - expr: 1 - slo:period_burn_rate:ratio{sloth_id="argocd-sync", sloth_service="argocd", sloth_slo="sync"}
-            labels:
-              lab: ceph-lab
-              sloth_id: argocd-sync
-              sloth_service: argocd
-              sloth_slo: sync
-            record: slo:period_error_budget_remaining:ratio
-          - expr: vector(1)
-            labels:
-              lab: ceph-lab
-              sloth_id: argocd-sync
-              sloth_mode: cli-gen-k8s
-              sloth_objective: "99"
-              sloth_service: argocd
-              sloth_slo: sync
-              sloth_spec: sloth.slok.dev/v1
-              sloth_version: 0.16.0
-            record: sloth_slo_info
-  # --- END sloth-generated recording rules ---
-  # --- BEGIN sloth-generated alerting rules (regenerate: just gen-slos) ---
-  # Source: applications/infrastructure/sloth/prometheusservicelevels.yaml
-  # DO NOT EDIT BY HAND — run `just gen-slos` after changing the source spec.
-  alerting_rules.yml:
-    groups:
-      - name: sloth-slo-alerts-ceph-rgw-availability
-        rules:
-          - alert: CephRGWAvailabilitySLO
-            annotations:
-              summary: '{{$labels.sloth_service}} {{$labels.sloth_slo}} SLO error budget burn rate is over expected.'
-              title: (page) {{$labels.sloth_service}} {{$labels.sloth_slo}} SLO error budget burn rate is too fast.
-            expr: |
-              (
-                  max(slo:sli_error:ratio_rate5m{sloth_id="ceph-rgw-availability", sloth_service="ceph-rgw", sloth_slo="availability"} > (14.4 * 0.0009999999999999432)) without (sloth_window)
-                  and
-                  max(slo:sli_error:ratio_rate1h{sloth_id="ceph-rgw-availability", sloth_service="ceph-rgw", sloth_slo="availability"} > (14.4 * 0.0009999999999999432)) without (sloth_window)
-              )
-              or
-              (
-                  max(slo:sli_error:ratio_rate30m{sloth_id="ceph-rgw-availability", sloth_service="ceph-rgw", sloth_slo="availability"} > (6 * 0.0009999999999999432)) without (sloth_window)
-                  and
-                  max(slo:sli_error:ratio_rate6h{sloth_id="ceph-rgw-availability", sloth_service="ceph-rgw", sloth_slo="availability"} > (6 * 0.0009999999999999432)) without (sloth_window)
-              )
-            labels:
-              severity: critical
-              sloth_severity: page
-          - alert: CephRGWAvailabilitySLO
-            annotations:
-              summary: '{{$labels.sloth_service}} {{$labels.sloth_slo}} SLO error budget burn rate is over expected.'
-              title: (ticket) {{$labels.sloth_service}} {{$labels.sloth_slo}} SLO error budget burn rate is too fast.
-            expr: |
-              (
-                  max(slo:sli_error:ratio_rate2h{sloth_id="ceph-rgw-availability", sloth_service="ceph-rgw", sloth_slo="availability"} > (3 * 0.0009999999999999432)) without (sloth_window)
-                  and
-                  max(slo:sli_error:ratio_rate1d{sloth_id="ceph-rgw-availability", sloth_service="ceph-rgw", sloth_slo="availability"} > (3 * 0.0009999999999999432)) without (sloth_window)
-              )
-              or
-              (
-                  max(slo:sli_error:ratio_rate6h{sloth_id="ceph-rgw-availability", sloth_service="ceph-rgw", sloth_slo="availability"} > (1 * 0.0009999999999999432)) without (sloth_window)
-                  and
-                  max(slo:sli_error:ratio_rate3d{sloth_id="ceph-rgw-availability", sloth_service="ceph-rgw", sloth_slo="availability"} > (1 * 0.0009999999999999432)) without (sloth_window)
-              )
-            labels:
-              severity: warning
-              sloth_severity: ticket
-      - name: sloth-slo-alerts-ceph-rgw-saturation
-        rules:
-          - alert: CephRGWSaturationSLO
-            annotations:
-              summary: '{{$labels.sloth_service}} {{$labels.sloth_slo}} SLO error budget burn rate is over expected.'
-              title: (page) {{$labels.sloth_service}} {{$labels.sloth_slo}} SLO error budget burn rate is too fast.
-            expr: |
-              (
-                  max(slo:sli_error:ratio_rate5m{sloth_id="ceph-rgw-saturation", sloth_service="ceph-rgw", sloth_slo="saturation"} > (14.4 * 0.01)) without (sloth_window)
-                  and
-                  max(slo:sli_error:ratio_rate1h{sloth_id="ceph-rgw-saturation", sloth_service="ceph-rgw", sloth_slo="saturation"} > (14.4 * 0.01)) without (sloth_window)
-              )
-              or
-              (
-                  max(slo:sli_error:ratio_rate30m{sloth_id="ceph-rgw-saturation", sloth_service="ceph-rgw", sloth_slo="saturation"} > (6 * 0.01)) without (sloth_window)
-                  and
-                  max(slo:sli_error:ratio_rate6h{sloth_id="ceph-rgw-saturation", sloth_service="ceph-rgw", sloth_slo="saturation"} > (6 * 0.01)) without (sloth_window)
-              )
-            labels:
-              severity: critical
-              sloth_severity: page
-          - alert: CephRGWSaturationSLO
-            annotations:
-              summary: '{{$labels.sloth_service}} {{$labels.sloth_slo}} SLO error budget burn rate is over expected.'
-              title: (ticket) {{$labels.sloth_service}} {{$labels.sloth_slo}} SLO error budget burn rate is too fast.
-            expr: |
-              (
-                  max(slo:sli_error:ratio_rate2h{sloth_id="ceph-rgw-saturation", sloth_service="ceph-rgw", sloth_slo="saturation"} > (3 * 0.01)) without (sloth_window)
-                  and
-                  max(slo:sli_error:ratio_rate1d{sloth_id="ceph-rgw-saturation", sloth_service="ceph-rgw", sloth_slo="saturation"} > (3 * 0.01)) without (sloth_window)
-              )
-              or
-              (
-                  max(slo:sli_error:ratio_rate6h{sloth_id="ceph-rgw-saturation", sloth_service="ceph-rgw", sloth_slo="saturation"} > (1 * 0.01)) without (sloth_window)
-                  and
-                  max(slo:sli_error:ratio_rate3d{sloth_id="ceph-rgw-saturation", sloth_service="ceph-rgw", sloth_slo="saturation"} > (1 * 0.01)) without (sloth_window)
-              )
-            labels:
-              severity: warning
-              sloth_severity: ticket
-      - name: sloth-slo-alerts-ceph-osd-latency
-        rules:
-          - alert: CephOSDLatencySLO
-            annotations:
-              summary: '{{$labels.sloth_service}} {{$labels.sloth_slo}} SLO error budget burn rate is over expected.'
-              title: (page) {{$labels.sloth_service}} {{$labels.sloth_slo}} SLO error budget burn rate is too fast.
-            expr: |
-              (
-                  max(slo:sli_error:ratio_rate5m{sloth_id="ceph-osd-latency", sloth_service="ceph-osd", sloth_slo="latency"} > (14.4 * 0.01)) without (sloth_window)
-                  and
-                  max(slo:sli_error:ratio_rate1h{sloth_id="ceph-osd-latency", sloth_service="ceph-osd", sloth_slo="latency"} > (14.4 * 0.01)) without (sloth_window)
-              )
-              or
-              (
-                  max(slo:sli_error:ratio_rate30m{sloth_id="ceph-osd-latency", sloth_service="ceph-osd", sloth_slo="latency"} > (6 * 0.01)) without (sloth_window)
-                  and
-                  max(slo:sli_error:ratio_rate6h{sloth_id="ceph-osd-latency", sloth_service="ceph-osd", sloth_slo="latency"} > (6 * 0.01)) without (sloth_window)
-              )
-            labels:
-              severity: critical
-              sloth_severity: page
-          - alert: CephOSDLatencySLO
-            annotations:
-              summary: '{{$labels.sloth_service}} {{$labels.sloth_slo}} SLO error budget burn rate is over expected.'
-              title: (ticket) {{$labels.sloth_service}} {{$labels.sloth_slo}} SLO error budget burn rate is too fast.
-            expr: |
-              (
-                  max(slo:sli_error:ratio_rate2h{sloth_id="ceph-osd-latency", sloth_service="ceph-osd", sloth_slo="latency"} > (3 * 0.01)) without (sloth_window)
-                  and
-                  max(slo:sli_error:ratio_rate1d{sloth_id="ceph-osd-latency", sloth_service="ceph-osd", sloth_slo="latency"} > (3 * 0.01)) without (sloth_window)
-              )
-              or
-              (
-                  max(slo:sli_error:ratio_rate6h{sloth_id="ceph-osd-latency", sloth_service="ceph-osd", sloth_slo="latency"} > (1 * 0.01)) without (sloth_window)
-                  and
-                  max(slo:sli_error:ratio_rate3d{sloth_id="ceph-osd-latency", sloth_service="ceph-osd", sloth_slo="latency"} > (1 * 0.01)) without (sloth_window)
-              )
-            labels:
-              severity: warning
-              sloth_severity: ticket
-      - name: sloth-slo-alerts-ceph-health
-        rules:
-          - alert: CephHealthSLO
-            annotations:
-              summary: '{{$labels.sloth_service}} {{$labels.sloth_slo}} SLO error budget burn rate is over expected.'
-              title: (page) {{$labels.sloth_service}} {{$labels.sloth_slo}} SLO error budget burn rate is too fast.
-            expr: |
-              (
-                  max(slo:sli_error:ratio_rate5m{sloth_id="ceph-health", sloth_service="ceph", sloth_slo="health"} > (14.4 * 0.0009999999999999432)) without (sloth_window)
-                  and
-                  max(slo:sli_error:ratio_rate1h{sloth_id="ceph-health", sloth_service="ceph", sloth_slo="health"} > (14.4 * 0.0009999999999999432)) without (sloth_window)
-              )
-              or
-              (
-                  max(slo:sli_error:ratio_rate30m{sloth_id="ceph-health", sloth_service="ceph", sloth_slo="health"} > (6 * 0.0009999999999999432)) without (sloth_window)
-                  and
-                  max(slo:sli_error:ratio_rate6h{sloth_id="ceph-health", sloth_service="ceph", sloth_slo="health"} > (6 * 0.0009999999999999432)) without (sloth_window)
-              )
-            labels:
-              severity: critical
-              sloth_severity: page
-          - alert: CephHealthSLO
-            annotations:
-              summary: '{{$labels.sloth_service}} {{$labels.sloth_slo}} SLO error budget burn rate is over expected.'
-              title: (ticket) {{$labels.sloth_service}} {{$labels.sloth_slo}} SLO error budget burn rate is too fast.
-            expr: |
-              (
-                  max(slo:sli_error:ratio_rate2h{sloth_id="ceph-health", sloth_service="ceph", sloth_slo="health"} > (3 * 0.0009999999999999432)) without (sloth_window)
-                  and
-                  max(slo:sli_error:ratio_rate1d{sloth_id="ceph-health", sloth_service="ceph", sloth_slo="health"} > (3 * 0.0009999999999999432)) without (sloth_window)
-              )
-              or
-              (
-                  max(slo:sli_error:ratio_rate6h{sloth_id="ceph-health", sloth_service="ceph", sloth_slo="health"} > (1 * 0.0009999999999999432)) without (sloth_window)
-                  and
-                  max(slo:sli_error:ratio_rate3d{sloth_id="ceph-health", sloth_service="ceph", sloth_slo="health"} > (1 * 0.0009999999999999432)) without (sloth_window)
-              )
-            labels:
-              severity: warning
-              sloth_severity: ticket
-      - name: sloth-slo-alerts-argocd-sync
-        rules:
-          - alert: ArgoCDSyncSLO
-            annotations:
-              summary: '{{$labels.sloth_service}} {{$labels.sloth_slo}} SLO error budget burn rate is over expected.'
-              title: (page) {{$labels.sloth_service}} {{$labels.sloth_slo}} SLO error budget burn rate is too fast.
-            expr: |
-              (
-                  max(slo:sli_error:ratio_rate5m{sloth_id="argocd-sync", sloth_service="argocd", sloth_slo="sync"} > (14.4 * 0.01)) without (sloth_window)
-                  and
-                  max(slo:sli_error:ratio_rate1h{sloth_id="argocd-sync", sloth_service="argocd", sloth_slo="sync"} > (14.4 * 0.01)) without (sloth_window)
-              )
-              or
-              (
-                  max(slo:sli_error:ratio_rate30m{sloth_id="argocd-sync", sloth_service="argocd", sloth_slo="sync"} > (6 * 0.01)) without (sloth_window)
-                  and
-                  max(slo:sli_error:ratio_rate6h{sloth_id="argocd-sync", sloth_service="argocd", sloth_slo="sync"} > (6 * 0.01)) without (sloth_window)
-              )
-            labels:
-              severity: critical
-              sloth_severity: page
-          - alert: ArgoCDSyncSLO
-            annotations:
-              summary: '{{$labels.sloth_service}} {{$labels.sloth_slo}} SLO error budget burn rate is over expected.'
-              title: (ticket) {{$labels.sloth_service}} {{$labels.sloth_slo}} SLO error budget burn rate is too fast.
-            expr: |
-              (
-                  max(slo:sli_error:ratio_rate2h{sloth_id="argocd-sync", sloth_service="argocd", sloth_slo="sync"} > (3 * 0.01)) without (sloth_window)
-                  and
-                  max(slo:sli_error:ratio_rate1d{sloth_id="argocd-sync", sloth_service="argocd", sloth_slo="sync"} > (3 * 0.01)) without (sloth_window)
-              )
-              or
-              (
-                  max(slo:sli_error:ratio_rate6h{sloth_id="argocd-sync", sloth_service="argocd", sloth_slo="sync"} > (1 * 0.01)) without (sloth_window)
-                  and
-                  max(slo:sli_error:ratio_rate3d{sloth_id="argocd-sync", sloth_service="argocd", sloth_slo="sync"} > (1 * 0.01)) without (sloth_window)
-              )
-            labels:
-              severity: warning
-              sloth_severity: ticket
-  # --- END sloth-generated alerting rules ---
+      - job_name: "kubernetes-pods"
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: kubernetes_pod_name
+
+      - job_name: "kubernetes-service-endpoints"
+        kubernetes_sd_configs:
+          - role: endpoints
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+            action: replace
+            target_label: __scheme__
+            regex: (https?)
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_service_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_service_name]
+            action: replace
+            target_label: kubernetes_name
+
+  # Prometheus self-scrapes via serviceMonitor.selfMonitor (chart default,
+  # left enabled) — no more manual "prometheus-self" static job needed.
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+# Real Alertmanager, not just Grafana unified alerting — thump needs a real
+# Alertmanager API/webhook surface to react to chaos experiments against.
+# The chart's default `alertmanager.config` already routes everything to a
+# no-op 'null' receiver, so enabling this doesn't start paging anyone by
+# itself; add real receivers/routes here once something should consume them.
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+# Standalone Grafana app (applications/infrastructure/grafana/) stays
+# authoritative — avoid a second, redundant Grafana.
+grafana:
+  enabled: false
+
+# k3s bundles the controller-manager/scheduler/etcd/kube-proxy into a single
+# binary with no separate kubeadm-style Services these default monitors
+# expect — leaving them enabled just produces permanently-down targets and
+# alerts. kubeApiServer/coreDns/kubelet stay enabled; k3s exposes normal
+# Services/kubelet endpoints for those.
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+defaultRules:
+  rules:
+    etcd: false
+    kubeControllerManager: false
+    kubeProxy: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+
+# Bundled as this chart's own subcharts now, rather than the old minimal
+# `prometheus` chart's — same resource tuning carried forward.
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi

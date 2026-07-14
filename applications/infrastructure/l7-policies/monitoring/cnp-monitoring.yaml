@@ -13,8 +13,8 @@ spec:
       toPorts:
         - ports:
             - { port: "9090", protocol: TCP } # Prometheus server
+            - { port: "9093", protocol: TCP } # Alertmanager
             - { port: "3000", protocol: TCP } # Grafana
-            - { port: "80", protocol: TCP }   # Prometheus service port
             - { port: "8080", protocol: TCP } # kube-state-metrics (metrics)
             - { port: "8081", protocol: TCP } # kube-state-metrics (telemetry)
     - fromEntities: [ host, remote-node ]

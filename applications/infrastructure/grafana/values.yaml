@@ -34,7 +34,7 @@ datasources:
       - name: Prometheus
         type: prometheus
         uid: prometheus
-        url: http://prometheus-server.monitoring.svc.cluster.local
+        url: http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090
         isDefault: true
         editable: true
       - name: Tempo

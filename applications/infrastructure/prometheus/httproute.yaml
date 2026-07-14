@@ -20,6 +20,6 @@ spec:
       backendRefs:
         - group: ""
           kind: Service
-          name: prometheus-server
-          port: 80
+          name: prometheus-kube-prometheus-prometheus
+          port: 9090
           weight: 1
