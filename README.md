@@ -92,6 +92,49 @@ Once `just up` finishes, these resolve via the `/etc/hosts` entries
 | Hubble UI | https://hubble.thump-test.lab |
 | Prometheus | https://prometheus.thump-test.lab |
 
+## Capacity (Wave 0b measure-then-size)
+
+The 3 worker nodes carry the entire CPU-request budget available to
+workloads (the control-plane is tainted `NoSchedule`; see
+`control-plane.sh`) — 10 vCPU total (2x `e2-standard-4` + 1x
+`e2-standard-2`, the whole 12-vCPU `CPUS_ALL_REGIONS` quota minus the
+control-plane's `e2-medium`).
+
+First bring-up measured **9575m requested / 10000m allocatable (96%)**
+with Ceph + the obs stack alone, before a single OTel-demo pod — leaving
+only ~425m free, nowhere near enough for even a trimmed demo. Breakdown by
+namespace showed Ceph itself (`rook-ceph`, 7755m) as the dominant
+consumer — not the obs stack (720m) or ArgoCD (650m) — and *within*
+`rook-ceph`, the CSI driver sidecars (3900m across 2 ctrlplugin replicas x
+2 drivers + 1 nodeplugin x2 drivers x3 workers) were larger than the 6 OSD
+daemons combined (2100m). That CSI cost was a chart-defaults artifact, not
+inherent to running Ceph — `csi.rbd.resources`/`csi.cephfs.resources`
+(the first thing tried) isn't a real key in rook-ceph chart v1.19.4 and
+was being silently ignored (confirmed via `kubectl get cm
+rook-ceph-operator-config -o yaml` showing the CSI_* resource keys blank),
+so the operator was running its own hardcoded defaults the whole time.
+
+Two levers applied together:
+
+1. **CSI resource tuning** (`applications/rook/operator/kustomization.yaml`)
+   — the real keys (`csiRBDProvisionerResource`, `csiRBDPluginResource`,
+   `csiCephFSProvisionerResource`, `csiCephFSPluginResource`,
+   `provisionerReplicas`). Provisioner sidecars cut 100m→30m (idle in a
+   single-cluster lab with no concurrent volume-op load), main plugin
+   driver containers cut 250m→100m (still do real I/O plumbing),
+   `provisionerReplicas` 2→1 (no HA need on a disposable rig). Frees
+   ~2980m — zero Tofu/GCE cost, pure GitOps re-sync.
+2. **OSD count** (`terraform.tfvars`: `osd_disks_per_node = 1`, down from
+   the `2` default) — 6 OSDs → 3, halving the OSD daemon CPU footprint
+   (2100m → ~1050m). Smaller Ceph failure domain, but a Ceph that still
+   degrades and recovers under chaos is all thump needs to react to.
+
+Combined, this should free roughly 4000m — worker CPU requests dropping
+from 96% to somewhere in the 55-60% range, leaving several vCPU of
+headroom for a trimmed OTel demo (Wave 3). Re-measure with `kubectl
+describe node` after any bring-up before trusting this number over a
+fresh one.
+
 ## Bringing your own app
 
 The point of this rig is to give a Tiltfile-driven dev loop something
