@@ -43,9 +43,17 @@ rm -rf /tmp/helm.tar.gz "/tmp/linux-${ARCH}"
 
 echo "[3] Write k3s server config"
 mkdir -p /etc/rancher/k3s
+# GCE's transient hostname is a coin flip between the short instance name and
+# the full internal-DNS FQDN (systemd-networkd's DHCP-supplied hostname vs.
+# google-guest-agent's metadata-based one racing at boot) — the FQDN form
+# blows past Kubernetes' 63-char node-name label limit and the node never
+# registers. Pin node-name explicitly so registration doesn't depend on which
+# one won the race.
+NODE_NAME=$(hostname -s)
 cat > /etc/rancher/k3s/config.yaml <<EOF
 advertise-address: ${CONTROL_PLANE_INTERNAL_IP}
 node-ip: ${CONTROL_PLANE_INTERNAL_IP}
+node-name: ${NODE_NAME}
 token: ${K3S_TOKEN}
 flannel-backend: "none"
 disable-network-policy: true

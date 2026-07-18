@@ -7,6 +7,10 @@
 #     and no boot-order race with the control-plane.
 #   - Own node IP comes from the GCE metadata server, not a grep over `ip addr`
 #     for a hardcoded Lima subnet prefix — works regardless of subnet_cidr.
+#   - --node-name pinned to `hostname -s`: GCE's transient hostname is a coin
+#     flip between the short instance name and the full internal-DNS FQDN, and
+#     the FQDN form blows past k8s' 63-char node-name label limit, so the node
+#     never registers. Don't rely on the raw `hostname` default.
 set -euo pipefail
 
 if [ -f /etc/thump-test-node.done ]; then
@@ -34,7 +38,7 @@ timeout 300 env \
     INSTALL_K3S_CHANNEL="${K3S_CHANNEL}" \
     K3S_URL="https://${CONTROL_PLANE_INTERNAL_IP}:6443" \
     K3S_TOKEN="${K3S_TOKEN}" \
-    INSTALL_K3S_EXEC="agent --node-ip=${NODE_IP}" \
+    INSTALL_K3S_EXEC="agent --node-ip=${NODE_IP} --node-name=$(hostname -s)" \
     /tmp/k3s-install.sh
 rm -f /tmp/k3s-install.sh
 
