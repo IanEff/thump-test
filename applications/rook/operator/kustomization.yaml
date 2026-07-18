@@ -19,24 +19,128 @@ helmCharts:
       csi:
         enableRbdDriver: true
         enableCephfsDriver: true
-        # Drastically lower CSI memory requests. Default 512Mi is way too high
-        # for a 6GB lab node and starves the actual storage daemons.
-        rbd:
-          resources:
-            requests:
-              cpu: 50m
-              memory: 128Mi
-            limits:
-              cpu: 250m
-              memory: 256Mi
-        cephfs:
-          resources:
-            requests:
-              cpu: 50m
-              memory: 128Mi
-            limits:
-              cpu: 250m
-              memory: 256Mi
+        # `csi.rbd.resources`/`csi.cephfs.resources` (tried first) is not a real
+        # key in this chart version -- it's silently ignored, and the operator's
+        # ConfigMap (CSI_{RBD,CEPHFS}_{PLUGIN,PROVISIONER}_RESOURCE) stays blank,
+        # so the operator falls back to its own hardcoded defaults (100m/sidecar
+        # x4 + 250m main driver container per ctrlplugin pod, 50m+250m per
+        # nodeplugin pod) -- confirmed live via `kubectl get cm
+        # rook-ceph-operator-config -o yaml` showing those keys empty. At 2
+        # ctrlplugin replicas x 2 drivers (rbd+cephfs) + 1 nodeplugin pod/driver
+        # per worker, that's ~3900m of the ~10 vCPU worker budget on CSI sidecars
+        # alone -- more than the 6 OSD daemons combined (2100m). The real keys
+        # match the ConfigMap names 1:1 (CSI_RBD_PLUGIN_RESOURCE ->
+        # csiRBDPluginResource, etc), each a YAML-list-as-string of per-container
+        # requests/limits. Provisioner sidecars (csi-provisioner/resizer/
+        # attacher/snapshotter) barely do anything in a single-cluster lab with
+        # no concurrent volume-op load, so they're cut hardest; the main
+        # rbdplugin/cephfsplugin driver containers do real I/O plumbing so keep
+        # more headroom. provisionerReplicas: 1 (from the chart's HA default of
+        # 2) halves ctrlplugin pod count outright -- no HA needed for a rig that
+        # exists to be broken and rebuilt.
+        provisionerReplicas: 1
+        csiRBDProvisionerResource: |
+          - name : csi-provisioner
+            resource:
+              requests:
+                memory: 128Mi
+                cpu: 30m
+              limits:
+                memory: 256Mi
+          - name : csi-resizer
+            resource:
+              requests:
+                memory: 128Mi
+                cpu: 30m
+              limits:
+                memory: 256Mi
+          - name : csi-attacher
+            resource:
+              requests:
+                memory: 128Mi
+                cpu: 30m
+              limits:
+                memory: 256Mi
+          - name : csi-snapshotter
+            resource:
+              requests:
+                memory: 128Mi
+                cpu: 30m
+              limits:
+                memory: 256Mi
+          - name : csi-rbdplugin
+            resource:
+              requests:
+                memory: 256Mi
+                cpu: 100m
+              limits:
+                memory: 512Mi
+        csiRBDPluginResource: |
+          - name : driver-registrar
+            resource:
+              requests:
+                memory: 128Mi
+                cpu: 20m
+              limits:
+                memory: 256Mi
+          - name : csi-rbdplugin
+            resource:
+              requests:
+                memory: 256Mi
+                cpu: 100m
+              limits:
+                memory: 512Mi
+        csiCephFSProvisionerResource: |
+          - name : csi-provisioner
+            resource:
+              requests:
+                memory: 128Mi
+                cpu: 30m
+              limits:
+                memory: 256Mi
+          - name : csi-resizer
+            resource:
+              requests:
+                memory: 128Mi
+                cpu: 30m
+              limits:
+                memory: 256Mi
+          - name : csi-attacher
+            resource:
+              requests:
+                memory: 128Mi
+                cpu: 30m
+              limits:
+                memory: 256Mi
+          - name : csi-snapshotter
+            resource:
+              requests:
+                memory: 128Mi
+                cpu: 30m
+              limits:
+                memory: 256Mi
+          - name : csi-cephfsplugin
+            resource:
+              requests:
+                memory: 256Mi
+                cpu: 100m
+              limits:
+                memory: 512Mi
+        csiCephFSPluginResource: |
+          - name : driver-registrar
+            resource:
+              requests:
+                memory: 128Mi
+                cpu: 20m
+              limits:
+                memory: 256Mi
+          - name : csi-cephfsplugin
+            resource:
+              requests:
+                memory: 256Mi
+                cpu: 100m
+              limits:
+                memory: 512Mi
       # Tune resource requests to coexist with Ceph daemons on worker nodes
       resources:
         requests:
