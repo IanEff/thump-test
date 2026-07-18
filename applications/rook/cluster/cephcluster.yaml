@@ -61,11 +61,22 @@ spec:
   cephConfig:
     mon:
       mon_clock_drift_allowed: "0.5"
+      # Default ceiling (250) assumes enough OSDs that per-pool PG counts
+      # spread thin. At 3 OSDs with replicated.size:3, every pool's PGs land
+      # on every OSD (no way to spread further), so "PGs per OSD" ==
+      # cluster-wide pg_num total regardless of pool sizing -- pg_autoscaler
+      # has nothing left to shrink once each pool is already at its own
+      # pg_num_min floor (~276 total at first Wave 0b bring-up with 3 OSDs).
+      # This is a lab-cluster-shape artifact, not a real problem to autoscale
+      # away -- raise the ceiling instead of fighting per-pool floors that
+      # exist for good reasons (rgw index/log pool parallelism, etc).
+      mon_max_pg_per_osd: "400"
     osd:
       osd_max_backfills: "1"
       osd_recovery_max_active: "1"
       osd_recovery_op_priority: "3"
       osd_memory_target: "2147483648" # 2Gi — stable for 8GB nodes
+      mon_max_pg_per_osd: "400"
 
   # ── Ops safety ────────────────────────────────────────────────────────────
   crashCollector:
