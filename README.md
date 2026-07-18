@@ -129,11 +129,17 @@ Two levers applied together:
    (2100m → ~1050m). Smaller Ceph failure domain, but a Ceph that still
    degrades and recovers under chaos is all thump needs to react to.
 
-Combined, this should free roughly 4000m — worker CPU requests dropping
-from 96% to somewhere in the 55-60% range, leaving several vCPU of
-headroom for a trimmed OTel demo (Wave 3). Re-measure with `kubectl
-describe node` after any bring-up before trusting this number over a
-fresh one.
+**Validated 2026-07-18** on a clean rebuild (ripcord.sh + fresh `tofu
+apply`, not a live patch): worker CPU requests dropped from 9575m/96% to
+**5685m/56.9%** — `rook-ceph` alone fell from 7755m to 3965m, almost
+exactly matching the predicted savings (2740m CSI + 1050m OSD ≈ 3790m
+predicted vs. 3790m actual). ~4315m of real headroom now exists for the
+Wave 3 demo. One side effect the prediction missed: dropping to 3 OSDs at
+`replicated.size: 3` means every pool's PGs land on all 3 OSDs (no room to
+spread further), so "PGs per OSD" degenerates to the cluster-wide `pg_num`
+total — tripped Ceph's default 250 ceiling (`applications/rook/cluster/cephcluster.yaml`'s
+`mon_max_pg_per_osd: "400"` fix). Re-measure with `kubectl describe node`
+after any future bring-up before trusting this number over a fresh one.
 
 ## Bringing your own app
 
