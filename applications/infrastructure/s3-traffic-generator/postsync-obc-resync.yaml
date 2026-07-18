@@ -1,0 +1,71 @@
+# PostSync gate for wave 40 (s3-traffic-generator).
+#
+# Rook's bucket-provisioner controller (a separate reconcile loop from
+# ArgoCD's sync engine, with no YAML-exposed retry/backoff knob) makes
+# exactly one provisioning attempt for the ObjectBucketClaim below, timed
+# against CephObjectStore reporting phase: Ready -- which on a fresh
+# bootstrap can happen minutes before the real RGW Deployment (created
+# out-of-band by the operator, not tracked by ArgoCD) has actually finished
+# coming up. That one attempt fails ("failed to load realm: (2) No such file
+# or directory") and the controller does not retry again on its own. See
+# CLAUDE.md gotcha #19 -- this used to require a manual
+# `kubectl annotate obc traffic-generator-bucket -n default
+# force-resync=$(date +%s) --overwrite` after every fresh `just up`. This Job
+# automates that exact nudge: poll the OBC's phase, and if it isn't Bound
+# yet, re-annotate it to force Rook's controller to retry, on a loop, until
+# it binds or the deadline below is hit.
+#
+# hook-delete-policy: BeforeHookCreation — old Job is removed at the start of
+# each sync, keeping the namespace tidy while still preserving logs between syncs.
+#
+# s3-traffic-generator is the last sync wave (40, tied with chaos-mesh) --
+# nothing downstream is gated by this Job, so a slow bind here can't delay
+# any other Application.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postsync-obc-resync
+  namespace: default
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  activeDeadlineSeconds: 900
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: obc-resync
+      restartPolicy: Never
+      containers:
+        - name: resync
+          # Same image as postsync-ceph-health.yaml (alpine/k8s: shell + kubectl).
+          image: alpine/k8s:1.32.2
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              NAME=traffic-generator-bucket
+              NS=default
+              # Leaves margin under this Job's own activeDeadlineSeconds so we
+              # get a clean "giving up" message instead of a hard DeadlineExceeded kill.
+              DEADLINE=$(( $(date +%s) + 840 ))
+
+              echo "==> PostSync gate: waiting for ObjectBucketClaim/${NAME} to reach Bound"
+
+              while true; do
+                phase=$(kubectl get obc "$NAME" -n "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || echo '<unknown>')
+                echo "    phase=${phase}"
+                if [ "$phase" = "Bound" ]; then
+                  echo "==> Bound. PostSync complete."
+                  exit 0
+                fi
+                if [ "$(date +%s)" -ge "$DEADLINE" ]; then
+                  echo "==> Still not Bound after the nudge window -- giving up."
+                  echo "    (the s3-traffic-generator Application's own retry budget will retry this whole PostSync gate)"
+                  exit 1
+                fi
+                echo "    nudging Rook's bucket-provisioner controller"
+                kubectl annotate obc "$NAME" -n "$NS" force-resync="$(date +%s)" --overwrite
+                sleep 20
+              done
