@@ -51,7 +51,7 @@ alerting: {}
 # cephcluster.yaml's/cluster-bootstrap's placement rules — it's already
 # busy with the k3s API server + ArgoCD). ceph-lab's original matched
 # `kubernetes.io/hostname NotIn [ceph-control]` — Lima's fixed VM hostname,
-# which doesn't exist on GCE (nodes here are rook-gce-k3s-control-plane /
+# which doesn't exist on GCE (nodes here are thump-test-control-plane /
 # -node-N), so the rule silently matched nothing and never actually kept
 # Grafana off the control-plane node. Match on the role label instead.
 affinity:

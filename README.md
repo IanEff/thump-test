@@ -1,4 +1,4 @@
-# rook-gce-k3s
+# thump-test
 
 A disposable, GitOps-managed Kubernetes testbed: **k3s + Rook Ceph +
 Cilium + Prometheus/Grafana/Sloth + Chaos Mesh + Kyverno**, running on
@@ -49,7 +49,7 @@ deliberate deviation from that upstream.
 # 1. Set your IP allowlist and GitOps repo (gitignored)
 cat > terraform.tfvars <<EOF
 allowed_source_ranges = ["YOUR.IP.HERE/32"]
-gitops_repo_url        = "https://github.com/YOUR_USERNAME/rook-gce-k3s.git"
+gitops_repo_url        = "https://github.com/YOUR_USERNAME/thump-test.git"
 EOF
 # Must be https://, not git@ — ArgoCD's Application sources and its
 # repo-access Secret are both https:// throughout this repo. See CLAUDE.md
@@ -59,7 +59,7 @@ EOF
 # The deploy key needs WRITE access (for the bootstrap push-back only —
 # ArgoCD itself clones anonymously if the repo's public, or via
 # gitops_repo_token if not). Put the private half at
-# ./deploy_rook-gce-k3s (gitignored).
+# ./deploy_thump-test (gitignored).
 
 # 2. Stand up the cluster (~2-4 min: no GKE control plane, no regional
 #    replication — just a handful of GCE VMs booting k3s)
@@ -70,10 +70,10 @@ just up
 just tunnel &
 
 # 4. Watch ArgoCD sync the world
-kubectl --context ceph-gce get applications -n argocd -w
+kubectl --context thump-test get applications -n argocd -w
 
 # 5. Check Ceph health
-kubectl --context ceph-gce exec -it -n rook-ceph deploy/rook-ceph-tools -- ceph status
+kubectl --context thump-test exec -it -n rook-ceph deploy/rook-ceph-tools -- ceph status
 
 # 6. Tear down — true zero cost, nothing left billing
 just destroy
@@ -86,11 +86,11 @@ Once `just up` finishes, these resolve via the `/etc/hosts` entries
 
 | Service | URL |
 |---|---|
-| ArgoCD | https://argocd.ceph-gce.lab |
-| Grafana | https://grafana.ceph-gce.lab |
-| Ceph Dashboard | https://dashboard.ceph-gce.lab |
-| Hubble UI | https://hubble.ceph-gce.lab |
-| Prometheus | https://prometheus.ceph-gce.lab |
+| ArgoCD | https://argocd.thump-test.lab |
+| Grafana | https://grafana.thump-test.lab |
+| Ceph Dashboard | https://dashboard.thump-test.lab |
+| Hubble UI | https://hubble.thump-test.lab |
+| Prometheus | https://prometheus.thump-test.lab |
 
 ## Bringing your own app
 
@@ -101,7 +101,7 @@ enough to tear down between sessions. A few things any such app's
 Tiltfile needs to account for, using thump's own `CLUSTERS` table
 (`Tiltfile` in the `thump` repo) as the reference:
 
-- **kubectl context is `ceph-gce`**, and it's IAP-tunnel-only — `just
+- **kubectl context is `thump-test`**, and it's IAP-tunnel-only — `just
   tunnel` (this repo) has to already be running before `tilt up`. Tilt
   has no hook to start that tunnel itself, and there's no floating LB IP
   to fall back on if it's not.
@@ -113,7 +113,7 @@ Tiltfile needs to account for, using thump's own `CLUSTERS` table
   registry; a container registry your nodes have pull access to (GHCR,
   Artifact Registry, etc.) is the only thing that works here, unlike a
   fully-local kind/k3d setup.
-- **`allow_k8s_contexts` needs the context named explicitly.** `ceph-gce`
+- **`allow_k8s_contexts` needs the context named explicitly.** `thump-test`
   doesn't match Tilt's built-in "known local cluster" name patterns
   (`kind-*`, `minikube`, ...), so Tilt refuses to deploy to it unless the
   Tiltfile allow-lists it by name.
@@ -140,7 +140,7 @@ experiment against a live OSD and watch Grafana/Prometheus — or your
 app, if it's watching the same signals — reflect it:
 
 ```bash
-kubectl --context ceph-gce apply -f - <<EOF
+kubectl --context thump-test apply -f - <<EOF
 apiVersion: chaos-mesh.org/v1alpha1
 kind: PodChaos
 metadata:

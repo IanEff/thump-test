@@ -18,7 +18,7 @@ set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../.." || exit 1
 
 PROJECT_ID=${PROJECT_ID:-"terraform-sandbox-430820"}
-CLUSTER_NAME=${CLUSTER_NAME:-"rook-gce-k3s"}
+CLUSTER_NAME=${CLUSTER_NAME:-"thump-test"}
 
 # Auto-discover zone/region from live resources instead of trusting a
 # hardcoded/stale default or a hand-typed env var -- this script exists for

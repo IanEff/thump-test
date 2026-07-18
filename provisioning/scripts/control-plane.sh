@@ -1,11 +1,11 @@
 #!/bin/bash
-# rook-gce-k3s — control-plane.sh
+# thump-test — control-plane.sh
 # Installs k3s server, Helm, and Cilium CNI on the control plane node. Ported
 # from ceph-lab's Lima-based control-plane.sh:
 #   - No LIMA_CIDATA sourcing / no per-user kubeconfig copy (see common.sh's
 #     note on OS Login not having a fixed username at provisioning time).
 #   - No "wait for + publish node-token" step — the k3s token is pre-shared
-#     via /etc/rook-gce-k3s.env (Tofu-generated random_password), so workers
+#     via /etc/thump-test.env (Tofu-generated random_password), so workers
 #     never have to wait on anything the control-plane produces at runtime.
 #   - tls-san includes the internal static IP (other cluster nodes reach this
 #     node via it), the external static IP (harmless to keep even though
@@ -14,17 +14,17 @@
 #     fetch_kubeconfig.py rewrites the server URL to 127.0.0.1 to match.
 set -euo pipefail
 
-if [ -f /etc/rook-gce-k3s-control-plane.done ]; then
+if [ -f /etc/thump-test-control-plane.done ]; then
     echo "[control-plane.sh] Already provisioned, skipping."
     exit 0
 fi
 
 set -a
-source /etc/rook-gce-k3s.env
+source /etc/thump-test.env
 set +a
 
 echo "══════════════════════════════════════════"
-echo "  rook-gce-k3s — control-plane setup       "
+echo "  thump-test — control-plane setup       "
 echo "══════════════════════════════════════════"
 
 echo "[1] Common baseline (kernel modules, sysctl, packages)"
@@ -110,5 +110,5 @@ else
     echo "[8] INSTALL_ARGOCD=false — skipping ArgoCD bootstrap."
 fi
 
-touch /etc/rook-gce-k3s-control-plane.done
+touch /etc/thump-test-control-plane.done
 echo "✓ control-plane.sh complete"

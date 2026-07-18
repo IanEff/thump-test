@@ -1,23 +1,23 @@
 # Root Application — seeds the entire GitOps tree.
-# Applied by install_argocd.sh after substituting https://github.com/IanEff/rook-gce-k3s.git.
+# Applied by install_argocd.sh after substituting https://github.com/IanEff/thump-test.git.
 #
-# This Application manages the ceph-lab cluster directory, which in turn
+# This Application manages the thump-test cluster directory, which in turn
 # contains:
 #   - infra-set.yaml    (ApplicationSet for all infrastructure)
 #   - rook-*.yaml       (individual Applications for Rook Ceph components)
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: ceph-lab-root
+  name: thump-test-root
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
-    repoURL: https://github.com/IanEff/rook-gce-k3s.git
+    repoURL: https://github.com/IanEff/thump-test.git
     targetRevision: HEAD
-    path: applications/clusters/ceph-lab
+    path: applications/clusters/thump-test
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd

@@ -1,5 +1,5 @@
 #!/bin/bash
-# rook-gce-k3s — wipe_ceph_disks.sh
+# thump-test — wipe_ceph_disks.sh
 # DESTRUCTIVE: deletes all Rook Ceph resources and zeroes OSD disks.
 # Use this to reinstall Rook without rebuilding VMs (tofu destroy/apply).
 # Run from the REPO ROOT on your Mac.
@@ -15,7 +15,7 @@ set -euo pipefail
 
 PROJECT_ID="${PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}"
 ZONE="${ZONE:?Set ZONE, e.g. ZONE=\$(tofu output -raw zone) -- don't hand-type a remembered value, it drifts (see terraform.tfvars)}"
-CLUSTER_NAME="${CLUSTER_NAME:-rook-gce-k3s}"
+CLUSTER_NAME="${CLUSTER_NAME:-thump-test}"
 NAMESPACE="rook-ceph"
 
 RED='\033[0;31m'

@@ -18,8 +18,8 @@ crash.*.log
 .env
 
 # Deploy key
-deploy_rook-gce-k3s
-deploy_rook-gce-k3s.pub
+deploy_thump-test
+deploy_thump-test.pub
 
 # Kubeconfig fragments copied out during fetch_kubeconfig.py
 kubeconfig*.yaml

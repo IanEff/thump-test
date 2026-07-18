@@ -1,5 +1,5 @@
 #!/bin/bash
-# rook-gce-k3s — common.sh
+# thump-test — common.sh
 # Runs on every node (control plane + workers) during provisioning.
 # Sets up kernel modules, sysctl, and shell ergonomics. Ported from ceph-lab's
 # Lima-based common.sh — no LIMA_CIDATA sourcing (no such thing on GCE), no
@@ -9,13 +9,13 @@
 # holds /var/lib/rancher — see variables.tf's boot_disk_size_gb).
 set -e
 
-if [ -f /etc/rook-gce-k3s-common.done ]; then
+if [ -f /etc/thump-test-common.done ]; then
     echo "[common.sh] Already provisioned, skipping."
     exit 0
 fi
 
 echo "══════════════════════════════════════════"
-echo "  rook-gce-k3s provisioning — common baseline"
+echo "  thump-test provisioning — common baseline"
 echo "══════════════════════════════════════════"
 
 echo "[1] Kernel modules for Kubernetes + Rook Ceph"
@@ -91,7 +91,7 @@ echo "[6] Shell ergonomics — fish, bash, vim, tmux"
 # OS Login home directory inherits.
 for TARGET_HOME in /etc/skel /root; do
     mkdir -p "${TARGET_HOME}/.config/fish/conf.d"
-    cat > "${TARGET_HOME}/.config/fish/conf.d/rook-gce-k3s.fish" <<'FISH'
+    cat > "${TARGET_HOME}/.config/fish/conf.d/thump-test.fish" <<'FISH'
 # ── Ceph / Rook diagnostics ──────────────────────────────────────────────────
 abbr -a ceph-status    'kubectl exec -n rook-ceph deploy/rook-ceph-tools -- ceph status'
 abbr -a ceph-df        'kubectl exec -n rook-ceph deploy/rook-ceph-tools -- ceph df detail'
@@ -131,7 +131,7 @@ FISH
 
     cat >> "${TARGET_HOME}/.bashrc" 2>/dev/null <<'BASH' || true
 
-# ── rook-gce-k3s convenience aliases ─────────────────────────────────────────
+# ── thump-test convenience aliases ─────────────────────────────────────────
 _toolbox() { kubectl exec -n rook-ceph deploy/rook-ceph-tools -- "$@"; }
 alias ceph-status='_toolbox ceph status'
 alias ceph-df='_toolbox ceph df detail'
@@ -172,7 +172,7 @@ VIM
 set -g mouse on
 set -g default-terminal "screen-256color"
 set -g status-style "bg=colour235,fg=colour136"
-set -g status-left  "#[fg=colour166,bold]  rook-gce-k3s  #[default]"
+set -g status-left  "#[fg=colour166,bold]  thump-test  #[default]"
 set -g status-right "#[fg=colour33]%H:%M  %d-%b  #[fg=colour166]#H"
 set -g status-right-length 50
 bind | split-window -h -c "#{pane_current_path}"
@@ -181,5 +181,5 @@ bind r source-file ~/.tmux.conf \; display "tmux.conf reloaded"
 TMUX
 done
 
-touch /etc/rook-gce-k3s-common.done
+touch /etc/thump-test-common.done
 echo "✓ common.sh complete"

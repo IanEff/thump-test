@@ -1,5 +1,5 @@
 #!/bin/bash
-# rook-gce-k3s — install_cilium.sh
+# thump-test — install_cilium.sh
 # Installs Gateway API CRDs (must precede Cilium) then Cilium via Helm.
 # Called by control-plane.sh; can also be re-run idempotently.
 #

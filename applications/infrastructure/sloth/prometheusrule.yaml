@@ -18,7 +18,7 @@ spec:
             /
             (sum(rate(ceph_rgw_req[5m])))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-availability
             sloth_service: ceph-rgw
             sloth_slo: availability
@@ -29,7 +29,7 @@ spec:
             /
             (sum(rate(ceph_rgw_req[30m])))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-availability
             sloth_service: ceph-rgw
             sloth_slo: availability
@@ -40,7 +40,7 @@ spec:
             /
             (sum(rate(ceph_rgw_req[1h])))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-availability
             sloth_service: ceph-rgw
             sloth_slo: availability
@@ -51,7 +51,7 @@ spec:
             /
             (sum(rate(ceph_rgw_req[2h])))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-availability
             sloth_service: ceph-rgw
             sloth_slo: availability
@@ -62,7 +62,7 @@ spec:
             /
             (sum(rate(ceph_rgw_req[6h])))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-availability
             sloth_service: ceph-rgw
             sloth_slo: availability
@@ -73,7 +73,7 @@ spec:
             /
             (sum(rate(ceph_rgw_req[1d])))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-availability
             sloth_service: ceph-rgw
             sloth_slo: availability
@@ -84,7 +84,7 @@ spec:
             /
             (sum(rate(ceph_rgw_req[3d])))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-availability
             sloth_service: ceph-rgw
             sloth_slo: availability
@@ -95,7 +95,7 @@ spec:
             / ignoring (sloth_window)
             count_over_time(slo:sli_error:ratio_rate5m{sloth_id="ceph-rgw-availability", sloth_service="ceph-rgw", sloth_slo="availability"}[30d])
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-availability
             sloth_service: ceph-rgw
             sloth_slo: availability
@@ -105,21 +105,21 @@ spec:
       rules:
         - expr: vector(0.9990000000000001)
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-availability
             sloth_service: ceph-rgw
             sloth_slo: availability
           record: slo:objective:ratio
         - expr: vector(1-0.9990000000000001)
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-availability
             sloth_service: ceph-rgw
             sloth_slo: availability
           record: slo:error_budget:ratio
         - expr: vector(30)
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-availability
             sloth_service: ceph-rgw
             sloth_slo: availability
@@ -129,7 +129,7 @@ spec:
             / on(sloth_id, sloth_slo, sloth_service) group_left
             slo:error_budget:ratio{sloth_id="ceph-rgw-availability", sloth_service="ceph-rgw", sloth_slo="availability"}
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-availability
             sloth_service: ceph-rgw
             sloth_slo: availability
@@ -139,21 +139,21 @@ spec:
             / on(sloth_id, sloth_slo, sloth_service) group_left
             slo:error_budget:ratio{sloth_id="ceph-rgw-availability", sloth_service="ceph-rgw", sloth_slo="availability"}
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-availability
             sloth_service: ceph-rgw
             sloth_slo: availability
           record: slo:period_burn_rate:ratio
         - expr: 1 - slo:period_burn_rate:ratio{sloth_id="ceph-rgw-availability", sloth_service="ceph-rgw", sloth_slo="availability"}
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-availability
             sloth_service: ceph-rgw
             sloth_slo: availability
           record: slo:period_error_budget_remaining:ratio
         - expr: vector(1)
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-availability
             sloth_mode: cli-gen-k8s
             sloth_objective: "99.9"
@@ -175,7 +175,7 @@ spec:
               )[5m:1m]
             ))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-saturation
             sloth_service: ceph-rgw
             sloth_slo: saturation
@@ -192,7 +192,7 @@ spec:
               )[30m:1m]
             ))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-saturation
             sloth_service: ceph-rgw
             sloth_slo: saturation
@@ -209,7 +209,7 @@ spec:
               )[1h:1m]
             ))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-saturation
             sloth_service: ceph-rgw
             sloth_slo: saturation
@@ -226,7 +226,7 @@ spec:
               )[2h:1m]
             ))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-saturation
             sloth_service: ceph-rgw
             sloth_slo: saturation
@@ -243,7 +243,7 @@ spec:
               )[6h:1m]
             ))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-saturation
             sloth_service: ceph-rgw
             sloth_slo: saturation
@@ -260,7 +260,7 @@ spec:
               )[1d:1m]
             ))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-saturation
             sloth_service: ceph-rgw
             sloth_slo: saturation
@@ -277,7 +277,7 @@ spec:
               )[3d:1m]
             ))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-saturation
             sloth_service: ceph-rgw
             sloth_slo: saturation
@@ -288,7 +288,7 @@ spec:
             / ignoring (sloth_window)
             count_over_time(slo:sli_error:ratio_rate5m{sloth_id="ceph-rgw-saturation", sloth_service="ceph-rgw", sloth_slo="saturation"}[30d])
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-saturation
             sloth_service: ceph-rgw
             sloth_slo: saturation
@@ -298,21 +298,21 @@ spec:
       rules:
         - expr: vector(0.99)
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-saturation
             sloth_service: ceph-rgw
             sloth_slo: saturation
           record: slo:objective:ratio
         - expr: vector(1-0.99)
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-saturation
             sloth_service: ceph-rgw
             sloth_slo: saturation
           record: slo:error_budget:ratio
         - expr: vector(30)
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-saturation
             sloth_service: ceph-rgw
             sloth_slo: saturation
@@ -322,7 +322,7 @@ spec:
             / on(sloth_id, sloth_slo, sloth_service) group_left
             slo:error_budget:ratio{sloth_id="ceph-rgw-saturation", sloth_service="ceph-rgw", sloth_slo="saturation"}
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-saturation
             sloth_service: ceph-rgw
             sloth_slo: saturation
@@ -332,21 +332,21 @@ spec:
             / on(sloth_id, sloth_slo, sloth_service) group_left
             slo:error_budget:ratio{sloth_id="ceph-rgw-saturation", sloth_service="ceph-rgw", sloth_slo="saturation"}
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-saturation
             sloth_service: ceph-rgw
             sloth_slo: saturation
           record: slo:period_burn_rate:ratio
         - expr: 1 - slo:period_burn_rate:ratio{sloth_id="ceph-rgw-saturation", sloth_service="ceph-rgw", sloth_slo="saturation"}
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-saturation
             sloth_service: ceph-rgw
             sloth_slo: saturation
           record: slo:period_error_budget_remaining:ratio
         - expr: vector(1)
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-rgw-saturation
             sloth_mode: cli-gen-k8s
             sloth_objective: "99"
@@ -362,7 +362,7 @@ spec:
             /
             (sum(rate(ceph_osd_op_w_latency_count{job="ceph-latency-bridge"}[5m])))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-osd-latency
             sloth_service: ceph-osd
             sloth_slo: latency
@@ -373,7 +373,7 @@ spec:
             /
             (sum(rate(ceph_osd_op_w_latency_count{job="ceph-latency-bridge"}[30m])))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-osd-latency
             sloth_service: ceph-osd
             sloth_slo: latency
@@ -384,7 +384,7 @@ spec:
             /
             (sum(rate(ceph_osd_op_w_latency_count{job="ceph-latency-bridge"}[1h])))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-osd-latency
             sloth_service: ceph-osd
             sloth_slo: latency
@@ -395,7 +395,7 @@ spec:
             /
             (sum(rate(ceph_osd_op_w_latency_count{job="ceph-latency-bridge"}[2h])))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-osd-latency
             sloth_service: ceph-osd
             sloth_slo: latency
@@ -406,7 +406,7 @@ spec:
             /
             (sum(rate(ceph_osd_op_w_latency_count{job="ceph-latency-bridge"}[6h])))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-osd-latency
             sloth_service: ceph-osd
             sloth_slo: latency
@@ -417,7 +417,7 @@ spec:
             /
             (sum(rate(ceph_osd_op_w_latency_count{job="ceph-latency-bridge"}[1d])))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-osd-latency
             sloth_service: ceph-osd
             sloth_slo: latency
@@ -428,7 +428,7 @@ spec:
             /
             (sum(rate(ceph_osd_op_w_latency_count{job="ceph-latency-bridge"}[3d])))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-osd-latency
             sloth_service: ceph-osd
             sloth_slo: latency
@@ -439,7 +439,7 @@ spec:
             / ignoring (sloth_window)
             count_over_time(slo:sli_error:ratio_rate5m{sloth_id="ceph-osd-latency", sloth_service="ceph-osd", sloth_slo="latency"}[30d])
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-osd-latency
             sloth_service: ceph-osd
             sloth_slo: latency
@@ -449,21 +449,21 @@ spec:
       rules:
         - expr: vector(0.99)
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-osd-latency
             sloth_service: ceph-osd
             sloth_slo: latency
           record: slo:objective:ratio
         - expr: vector(1-0.99)
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-osd-latency
             sloth_service: ceph-osd
             sloth_slo: latency
           record: slo:error_budget:ratio
         - expr: vector(30)
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-osd-latency
             sloth_service: ceph-osd
             sloth_slo: latency
@@ -473,7 +473,7 @@ spec:
             / on(sloth_id, sloth_slo, sloth_service) group_left
             slo:error_budget:ratio{sloth_id="ceph-osd-latency", sloth_service="ceph-osd", sloth_slo="latency"}
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-osd-latency
             sloth_service: ceph-osd
             sloth_slo: latency
@@ -483,21 +483,21 @@ spec:
             / on(sloth_id, sloth_slo, sloth_service) group_left
             slo:error_budget:ratio{sloth_id="ceph-osd-latency", sloth_service="ceph-osd", sloth_slo="latency"}
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-osd-latency
             sloth_service: ceph-osd
             sloth_slo: latency
           record: slo:period_burn_rate:ratio
         - expr: 1 - slo:period_burn_rate:ratio{sloth_id="ceph-osd-latency", sloth_service="ceph-osd", sloth_slo="latency"}
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-osd-latency
             sloth_service: ceph-osd
             sloth_slo: latency
           record: slo:period_error_budget_remaining:ratio
         - expr: vector(1)
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-osd-latency
             sloth_mode: cli-gen-k8s
             sloth_objective: "99"
@@ -510,7 +510,7 @@ spec:
       rules:
         - expr: (max(avg_over_time(clamp_max(ceph_health_status, 1)[5m:1m])))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-health
             sloth_service: ceph
             sloth_slo: health
@@ -518,7 +518,7 @@ spec:
           record: slo:sli_error:ratio_rate5m
         - expr: (max(avg_over_time(clamp_max(ceph_health_status, 1)[30m:1m])))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-health
             sloth_service: ceph
             sloth_slo: health
@@ -526,7 +526,7 @@ spec:
           record: slo:sli_error:ratio_rate30m
         - expr: (max(avg_over_time(clamp_max(ceph_health_status, 1)[1h:1m])))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-health
             sloth_service: ceph
             sloth_slo: health
@@ -534,7 +534,7 @@ spec:
           record: slo:sli_error:ratio_rate1h
         - expr: (max(avg_over_time(clamp_max(ceph_health_status, 1)[2h:1m])))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-health
             sloth_service: ceph
             sloth_slo: health
@@ -542,7 +542,7 @@ spec:
           record: slo:sli_error:ratio_rate2h
         - expr: (max(avg_over_time(clamp_max(ceph_health_status, 1)[6h:1m])))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-health
             sloth_service: ceph
             sloth_slo: health
@@ -550,7 +550,7 @@ spec:
           record: slo:sli_error:ratio_rate6h
         - expr: (max(avg_over_time(clamp_max(ceph_health_status, 1)[1d:1m])))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-health
             sloth_service: ceph
             sloth_slo: health
@@ -558,7 +558,7 @@ spec:
           record: slo:sli_error:ratio_rate1d
         - expr: (max(avg_over_time(clamp_max(ceph_health_status, 1)[3d:1m])))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-health
             sloth_service: ceph
             sloth_slo: health
@@ -569,7 +569,7 @@ spec:
             / ignoring (sloth_window)
             count_over_time(slo:sli_error:ratio_rate5m{sloth_id="ceph-health", sloth_service="ceph", sloth_slo="health"}[30d])
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-health
             sloth_service: ceph
             sloth_slo: health
@@ -579,21 +579,21 @@ spec:
       rules:
         - expr: vector(0.9990000000000001)
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-health
             sloth_service: ceph
             sloth_slo: health
           record: slo:objective:ratio
         - expr: vector(1-0.9990000000000001)
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-health
             sloth_service: ceph
             sloth_slo: health
           record: slo:error_budget:ratio
         - expr: vector(30)
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-health
             sloth_service: ceph
             sloth_slo: health
@@ -603,7 +603,7 @@ spec:
             / on(sloth_id, sloth_slo, sloth_service) group_left
             slo:error_budget:ratio{sloth_id="ceph-health", sloth_service="ceph", sloth_slo="health"}
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-health
             sloth_service: ceph
             sloth_slo: health
@@ -613,21 +613,21 @@ spec:
             / on(sloth_id, sloth_slo, sloth_service) group_left
             slo:error_budget:ratio{sloth_id="ceph-health", sloth_service="ceph", sloth_slo="health"}
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-health
             sloth_service: ceph
             sloth_slo: health
           record: slo:period_burn_rate:ratio
         - expr: 1 - slo:period_burn_rate:ratio{sloth_id="ceph-health", sloth_service="ceph", sloth_slo="health"}
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-health
             sloth_service: ceph
             sloth_slo: health
           record: slo:period_error_budget_remaining:ratio
         - expr: vector(1)
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-health
             sloth_mode: cli-gen-k8s
             sloth_objective: "99.9"
@@ -640,7 +640,7 @@ spec:
       rules:
         - expr: (avg_over_time((count(argocd_app_info{sync_status!="Synced"}) or vector(0))[5m:1m]) / avg_over_time(count(argocd_app_info)[5m:1m]))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: argocd-sync
             sloth_service: argocd
             sloth_slo: sync
@@ -648,7 +648,7 @@ spec:
           record: slo:sli_error:ratio_rate5m
         - expr: (avg_over_time((count(argocd_app_info{sync_status!="Synced"}) or vector(0))[30m:1m]) / avg_over_time(count(argocd_app_info)[30m:1m]))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: argocd-sync
             sloth_service: argocd
             sloth_slo: sync
@@ -656,7 +656,7 @@ spec:
           record: slo:sli_error:ratio_rate30m
         - expr: (avg_over_time((count(argocd_app_info{sync_status!="Synced"}) or vector(0))[1h:1m]) / avg_over_time(count(argocd_app_info)[1h:1m]))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: argocd-sync
             sloth_service: argocd
             sloth_slo: sync
@@ -664,7 +664,7 @@ spec:
           record: slo:sli_error:ratio_rate1h
         - expr: (avg_over_time((count(argocd_app_info{sync_status!="Synced"}) or vector(0))[2h:1m]) / avg_over_time(count(argocd_app_info)[2h:1m]))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: argocd-sync
             sloth_service: argocd
             sloth_slo: sync
@@ -672,7 +672,7 @@ spec:
           record: slo:sli_error:ratio_rate2h
         - expr: (avg_over_time((count(argocd_app_info{sync_status!="Synced"}) or vector(0))[6h:1m]) / avg_over_time(count(argocd_app_info)[6h:1m]))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: argocd-sync
             sloth_service: argocd
             sloth_slo: sync
@@ -680,7 +680,7 @@ spec:
           record: slo:sli_error:ratio_rate6h
         - expr: (avg_over_time((count(argocd_app_info{sync_status!="Synced"}) or vector(0))[1d:1m]) / avg_over_time(count(argocd_app_info)[1d:1m]))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: argocd-sync
             sloth_service: argocd
             sloth_slo: sync
@@ -688,7 +688,7 @@ spec:
           record: slo:sli_error:ratio_rate1d
         - expr: (avg_over_time((count(argocd_app_info{sync_status!="Synced"}) or vector(0))[3d:1m]) / avg_over_time(count(argocd_app_info)[3d:1m]))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: argocd-sync
             sloth_service: argocd
             sloth_slo: sync
@@ -699,7 +699,7 @@ spec:
             / ignoring (sloth_window)
             count_over_time(slo:sli_error:ratio_rate5m{sloth_id="argocd-sync", sloth_service="argocd", sloth_slo="sync"}[30d])
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: argocd-sync
             sloth_service: argocd
             sloth_slo: sync
@@ -709,21 +709,21 @@ spec:
       rules:
         - expr: vector(0.99)
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: argocd-sync
             sloth_service: argocd
             sloth_slo: sync
           record: slo:objective:ratio
         - expr: vector(1-0.99)
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: argocd-sync
             sloth_service: argocd
             sloth_slo: sync
           record: slo:error_budget:ratio
         - expr: vector(30)
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: argocd-sync
             sloth_service: argocd
             sloth_slo: sync
@@ -733,7 +733,7 @@ spec:
             / on(sloth_id, sloth_slo, sloth_service) group_left
             slo:error_budget:ratio{sloth_id="argocd-sync", sloth_service="argocd", sloth_slo="sync"}
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: argocd-sync
             sloth_service: argocd
             sloth_slo: sync
@@ -743,21 +743,21 @@ spec:
             / on(sloth_id, sloth_slo, sloth_service) group_left
             slo:error_budget:ratio{sloth_id="argocd-sync", sloth_service="argocd", sloth_slo="sync"}
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: argocd-sync
             sloth_service: argocd
             sloth_slo: sync
           record: slo:period_burn_rate:ratio
         - expr: 1 - slo:period_burn_rate:ratio{sloth_id="argocd-sync", sloth_service="argocd", sloth_slo="sync"}
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: argocd-sync
             sloth_service: argocd
             sloth_slo: sync
           record: slo:period_error_budget_remaining:ratio
         - expr: vector(1)
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: argocd-sync
             sloth_mode: cli-gen-k8s
             sloth_objective: "99"
@@ -776,7 +776,7 @@ spec:
               )[5m:1m]
             ))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-redundancy
             sloth_service: ceph
             sloth_slo: redundancy
@@ -790,7 +790,7 @@ spec:
               )[30m:1m]
             ))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-redundancy
             sloth_service: ceph
             sloth_slo: redundancy
@@ -804,7 +804,7 @@ spec:
               )[1h:1m]
             ))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-redundancy
             sloth_service: ceph
             sloth_slo: redundancy
@@ -818,7 +818,7 @@ spec:
               )[2h:1m]
             ))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-redundancy
             sloth_service: ceph
             sloth_slo: redundancy
@@ -832,7 +832,7 @@ spec:
               )[6h:1m]
             ))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-redundancy
             sloth_service: ceph
             sloth_slo: redundancy
@@ -846,7 +846,7 @@ spec:
               )[1d:1m]
             ))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-redundancy
             sloth_service: ceph
             sloth_slo: redundancy
@@ -860,7 +860,7 @@ spec:
               )[3d:1m]
             ))
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-redundancy
             sloth_service: ceph
             sloth_slo: redundancy
@@ -871,7 +871,7 @@ spec:
             / ignoring (sloth_window)
             count_over_time(slo:sli_error:ratio_rate5m{sloth_id="ceph-redundancy", sloth_service="ceph", sloth_slo="redundancy"}[30d])
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-redundancy
             sloth_service: ceph
             sloth_slo: redundancy
@@ -881,21 +881,21 @@ spec:
       rules:
         - expr: vector(0.9990000000000001)
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-redundancy
             sloth_service: ceph
             sloth_slo: redundancy
           record: slo:objective:ratio
         - expr: vector(1-0.9990000000000001)
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-redundancy
             sloth_service: ceph
             sloth_slo: redundancy
           record: slo:error_budget:ratio
         - expr: vector(30)
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-redundancy
             sloth_service: ceph
             sloth_slo: redundancy
@@ -905,7 +905,7 @@ spec:
             / on(sloth_id, sloth_slo, sloth_service) group_left
             slo:error_budget:ratio{sloth_id="ceph-redundancy", sloth_service="ceph", sloth_slo="redundancy"}
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-redundancy
             sloth_service: ceph
             sloth_slo: redundancy
@@ -915,21 +915,21 @@ spec:
             / on(sloth_id, sloth_slo, sloth_service) group_left
             slo:error_budget:ratio{sloth_id="ceph-redundancy", sloth_service="ceph", sloth_slo="redundancy"}
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-redundancy
             sloth_service: ceph
             sloth_slo: redundancy
           record: slo:period_burn_rate:ratio
         - expr: 1 - slo:period_burn_rate:ratio{sloth_id="ceph-redundancy", sloth_service="ceph", sloth_slo="redundancy"}
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-redundancy
             sloth_service: ceph
             sloth_slo: redundancy
           record: slo:period_error_budget_remaining:ratio
         - expr: vector(1)
           labels:
-            lab: ceph-lab
+            lab: thump-test
             sloth_id: ceph-redundancy
             sloth_mode: cli-gen-k8s
             sloth_objective: "99.9"

@@ -1,8 +1,8 @@
 #!/bin/bash
-# rook-gce-k3s — install_argocd.sh
+# thump-test — install_argocd.sh
 # Bootstraps ArgoCD and seeds the root Application that drives GitOps.
 #
-# Requires (from /etc/rook-gce-k3s.env, written by the Tofu-rendered bootstrap
+# Requires (from /etc/thump-test.env, written by the Tofu-rendered bootstrap
 # wrapper):
 #   GITOPS_REPO_URL, GITOPS_REPO_TOKEN, GITOPS_SSH_KEY_PATH
 #
@@ -15,7 +15,7 @@ set -euo pipefail
 export KUBECONFIG=/root/.kube/config
 
 set -a
-[ -f /etc/rook-gce-k3s.env ] && source /etc/rook-gce-k3s.env
+[ -f /etc/thump-test.env ] && source /etc/thump-test.env
 set +a
 
 GITOPS_REPO_URL="${GITOPS_REPO_URL:-}"
@@ -29,7 +29,7 @@ if [ -z "$GITOPS_REPO_URL" ]; then
 fi
 
 echo "══════════════════════════════════════════"
-echo "  rook-gce-k3s — ArgoCD bootstrap           "
+echo "  thump-test — ArgoCD bootstrap           "
 echo "  Repo: ${GITOPS_REPO_URL}                 "
 echo "══════════════════════════════════════════"
 
@@ -73,8 +73,8 @@ sed -i "s|GCE_CONTROL_PLANE_IP_PLACEHOLDER|${CONTROL_PLANE_INTERNAL_IP}|g" \
 
 echo "[0c] Commit and push the substituted values back so ArgoCD (reading from git) picks them up"
 cd /ceph-lab
-git config user.email "rook-gce-k3s-bootstrap@localhost"
-git config user.name "rook-gce-k3s-bootstrap"
+git config user.email "thump-test-bootstrap@localhost"
+git config user.name "thump-test-bootstrap"
 git add -A
 git commit -m "bootstrap: substitute GITOPS_REPO_URL / CONTROL_PLANE_IP placeholders" --quiet || true
 # Fatal, not a warn-and-continue: a failed push here leaves ArgoCD reconciling
@@ -135,7 +135,7 @@ if [ -n "$GITOPS_REPO_TOKEN" ]; then
 apiVersion: v1
 kind: Secret
 metadata:
-  name: rook-gce-k3s-repo
+  name: thump-test-repo
   namespace: argocd
   labels:
     argocd.argoproj.io/secret-type: repository
@@ -158,7 +158,7 @@ echo ""
 echo "✓ ArgoCD is bootstrapped! (argocd CLI install from step [0a] may still be"
 echo "  finishing in the background -- check /var/log/argocd-cli-install.log)"
 echo ""
-echo "  UI:       https://argocd.ceph-gce.lab  (after manage_hosts.py has run on the Mac)"
+echo "  UI:       https://argocd.thump-test.lab  (after manage_hosts.py has run on the Mac)"
 echo "  Login:    admin / password  (CHANGE IN PRODUCTION)"
 echo ""
 echo "  Watch sync progress:"

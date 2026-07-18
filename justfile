@@ -1,4 +1,4 @@
-# rook-gce-k3s lifecycle wrapper. `just` alone lists recipes.
+# thump-test lifecycle wrapper. `just` alone lists recipes.
 #
 # Unlike rook-gke's justfile, there's no gke-gcloud-auth-plugin PATH dance
 # here — Tofu only touches GCP (no kubernetes/helm providers), and kubectl
@@ -6,7 +6,7 @@
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
-cluster_name := "rook-gce-k3s"
+cluster_name := "thump-test"
 # `-raw` is unsafe here: on a fresh/empty state (e.g. the first `just up`,
 # before `apply` has ever run — these backticks are evaluated once up front
 # for the whole invocation, not lazily when a recipe body uses them) it
@@ -47,9 +47,9 @@ up: apply credentials thump-env
     @echo
     @echo "Cluster is up. The k3s API is IAP-tunnel-only — open one first:"
     @echo "  just tunnel &"
-    @echo "then sanity check: kubectl --context ceph-gce get nodes"
+    @echo "then sanity check: kubectl --context thump-test get nodes"
     @echo
-    @echo "Watch ArgoCD sync: kubectl --context ceph-gce get applications -n argocd -w"
+    @echo "Watch ArgoCD sync: kubectl --context thump-test get applications -n argocd -w"
     @echo "Or time the full boot: just boot-timeline (in its own terminal)"
 
 # Push storage.tf's S3 outputs (bucket/endpoint/HMAC key) into thump's .env
@@ -69,7 +69,7 @@ destroy: init
     python3 provisioning/scripts/fetch_kubeconfig.py remove
 
 # Fetch kubeconfig (gcloud compute ssh transport, OS Login) and merge it in,
-# then write the fixed *.ceph-gce.lab hostnames into /etc/hosts.
+# then write the fixed *.thump-test.lab hostnames into /etc/hosts.
 credentials: kubeconfig hosts
 
 # No ZONE here on purpose: {{zone}} is evaluated once, up front, for the

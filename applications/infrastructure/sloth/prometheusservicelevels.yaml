@@ -27,7 +27,7 @@ metadata:
 spec:
   service: ceph-rgw
   labels:
-    lab: ceph-lab
+    lab: thump-test
   slos:
     - name: availability
       objective: 99.9
@@ -60,7 +60,7 @@ metadata:
 spec:
   service: ceph-rgw
   labels:
-    lab: ceph-lab
+    lab: thump-test
   slos:
     - name: saturation
       objective: 99
@@ -82,7 +82,7 @@ spec:
         ceph-rgw-availability, only populates once RGW has served at least
         one GET or PUT (division by zero otherwise) — seed with
         applications/infrastructure/s3-traffic-generator.
-        METRIC NAMES VERIFIED LIVE 2026-07-14 against ceph-gce's real scrape
+        METRIC NAMES VERIFIED LIVE 2026-07-14 against thump-test's real scrape
         (`curl -s "$PROM_URL/api/v1/label/__name__/values" | grep
         rgw_.*lat`): RGW's actual perf-counter names on this cluster
         (ceph v19.2.3) are ceph_rgw_op_get_obj_lat_sum/_count and
@@ -138,7 +138,7 @@ metadata:
 spec:
   service: ceph-osd
   labels:
-    lab: ceph-lab
+    lab: thump-test
   slos:
     - name: latency
       objective: 99
@@ -178,7 +178,7 @@ metadata:
 spec:
   service: ceph
   labels:
-    lab: ceph-lab
+    lab: thump-test
   slos:
     - name: health
       objective: 99.9
@@ -207,7 +207,7 @@ metadata:
 spec:
   service: argocd
   labels:
-    lab: ceph-lab
+    lab: thump-test
   slos:
     - name: sync
       objective: 99
@@ -246,7 +246,7 @@ metadata:
 spec:
   service: ceph
   labels:
-    lab: ceph-lab
+    lab: thump-test
   slos:
     - name: redundancy
       objective: 99.9
@@ -260,7 +260,7 @@ spec:
         undersized PG" — not a raw count fed into burn math, so it can't
         over-burn the way an unbounded count would (same shape as ceph-health's
         clamp_max fraction, not ceph-rgw-saturation's original ratio bug).
-        METRIC NAMES VERIFIED LIVE 2026-07-16 against ceph-gce's real scrape
+        METRIC NAMES VERIFIED LIVE 2026-07-16 against thump-test's real scrape
         (`curl -sG .../api/v1/query --data-urlencode query=ceph_pg_degraded`):
         ceph_pg_degraded and ceph_pg_undersized are both exported by the
         rook-ceph-mgr job, labeled per pool_id, and both read 0 on the healthy

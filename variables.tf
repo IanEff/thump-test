@@ -19,7 +19,7 @@ variable "zone" {
 variable "cluster_name" {
   description = "Prefix for every named resource (instances, disks, network, firewall rules)."
   type        = string
-  default     = "rook-gce-k3s"
+  default     = "thump-test"
 }
 
 variable "num_ceph_nodes" {
@@ -97,7 +97,7 @@ variable "gitops_repo_token" {
 variable "gitops_ssh_key_path" {
   description = "Local path to the SSH deploy private key (relative to repo root). Matches ceph-lab's convention: the key pair lives at the repo root and is gitignored. Leave blank to use gitops_repo_token (HTTPS) instead. Needs WRITE access — see gitops_repo_token's note on why."
   type        = string
-  default     = "deploy_rook-gce-k3s"
+  default     = "deploy_thump-test"
 }
 
 variable "install_argocd" {

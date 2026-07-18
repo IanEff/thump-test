@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch and merge kubeconfig for the rook-gce-k3s cluster.
+"""Fetch and merge kubeconfig for the thump-test cluster.
 
 Ported from ceph-lab's manage_k8s_config.py: the transport becomes
 `gcloud compute ssh ... --command` (OS Login, tunneled through IAP — port 22
@@ -28,9 +28,9 @@ from pathlib import Path
 
 KUBE_CONFIG_PATH = Path.home() / ".kube" / "config"
 
-NEW_CONTEXT_NAME = "ceph-gce"
-NEW_USER_NAME = "ceph-gce-admin"
-NEW_CLUSTER_NAME = "ceph-gce-cluster"
+NEW_CONTEXT_NAME = "thump-test"
+NEW_USER_NAME = "thump-test-admin"
+NEW_CLUSTER_NAME = "thump-test-cluster"
 
 # control-plane.sh runs k3s + Cilium install after boot; SSH (and even OS
 # Login key propagation) can be reachable well before /root/.kube/config
@@ -68,7 +68,7 @@ def add() -> None:
     # nonexistent instance before finally failing). Tofu's own output is the
     # only source of truth that can't drift out from under a manual invocation.
     zone = os.environ.get("ZONE") or tofu_output("zone")
-    cluster_name = os.environ.get("CLUSTER_NAME", "rook-gce-k3s")
+    cluster_name = os.environ.get("CLUSTER_NAME", "thump-test")
     internal_ip = tofu_output("control_plane_internal_ip")
 
     instance = f"{cluster_name}-control-plane"
@@ -140,7 +140,7 @@ def tofu_output_or_default() -> str:
 
 
 def remove() -> None:
-    print("Removing rook-gce-k3s Kubernetes configuration...")
+    print("Removing thump-test Kubernetes configuration...")
     cmds = [
         ["kubectl", "config", "delete-context", NEW_CONTEXT_NAME],
         ["kubectl", "config", "delete-cluster", NEW_CLUSTER_NAME],

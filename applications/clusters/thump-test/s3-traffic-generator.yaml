@@ -25,7 +25,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/IanEff/rook-gce-k3s.git
+    repoURL: https://github.com/IanEff/thump-test.git
     targetRevision: HEAD
     path: applications/infrastructure/s3-traffic-generator
   destination:

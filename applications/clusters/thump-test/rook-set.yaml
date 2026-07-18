@@ -6,7 +6,7 @@ metadata:
 spec:
   generators:
     - git:
-        repoURL: https://github.com/IanEff/rook-gce-k3s.git
+        repoURL: https://github.com/IanEff/thump-test.git
         revision: HEAD
         files:
           - path: applications/rook/**/config.json
@@ -19,7 +19,7 @@ spec:
     spec:
       project: default
       source:
-        repoURL: https://github.com/IanEff/rook-gce-k3s.git
+        repoURL: https://github.com/IanEff/thump-test.git
         targetRevision: HEAD
         path: "{{localPath}}"
       destination:

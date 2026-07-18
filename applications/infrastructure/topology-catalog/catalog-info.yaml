@@ -21,7 +21,7 @@ metadata:
 spec:
   type: service
   lifecycle: experimental
-  owner: ceph-lab
+  owner: thump-test
   dependsOn:
     - resource:default/cephobjectstore
     - component:default/rook-operator
@@ -34,7 +34,7 @@ metadata:
 spec:
   type: service
   lifecycle: experimental
-  owner: ceph-lab
+  owner: thump-test
   dependsOn:
     - resource:default/cephblockpool
     - resource:default/ceph-node-1
@@ -49,7 +49,7 @@ metadata:
 spec:
   type: service
   lifecycle: experimental
-  owner: ceph-lab
+  owner: thump-test
   dependsOn:
     - resource:default/cephcluster
     - component:default/rook-operator
@@ -62,7 +62,7 @@ metadata:
 spec:
   type: service
   lifecycle: experimental
-  owner: ceph-lab
+  owner: thump-test
   dependsOn:
     - component:default/cilium
     - component:default/rook-operator
@@ -75,7 +75,7 @@ metadata:
 spec:
   type: service
   lifecycle: experimental
-  owner: ceph-lab
+  owner: thump-test
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Component
@@ -85,7 +85,7 @@ metadata:
 spec:
   type: service
   lifecycle: experimental
-  owner: ceph-lab
+  owner: thump-test
 
 # --- Storage resources ---
 ---
@@ -96,7 +96,7 @@ metadata:
   description: The CephCluster CR — the whole Ceph deployment.
 spec:
   type: ceph-storage
-  owner: ceph-lab
+  owner: thump-test
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Resource
@@ -105,7 +105,7 @@ metadata:
   description: replicapool — the RBD block pool backing rook-ceph-block (cluster-default StorageClass).
 spec:
   type: ceph-storage
-  owner: ceph-lab
+  owner: thump-test
   dependsOn:
     - resource:default/cephcluster
 ---
@@ -116,7 +116,7 @@ metadata:
   description: CephFS filesystem (requires the CephFilesystemSubVolumeGroup, gotcha #4).
 spec:
   type: ceph-storage
-  owner: ceph-lab
+  owner: thump-test
   dependsOn:
     - resource:default/cephcluster
 ---
@@ -127,7 +127,7 @@ metadata:
   description: RGW object store backing the ceph-rgw component.
 spec:
   type: ceph-storage
-  owner: ceph-lab
+  owner: thump-test
   dependsOn:
     - resource:default/cephcluster
 
@@ -140,7 +140,7 @@ metadata:
   description: k3s server node (GCE VM, e2-medium).
 spec:
   type: compute-node
-  owner: ceph-lab
+  owner: thump-test
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Resource
@@ -149,7 +149,7 @@ metadata:
   description: k3s agent + Ceph OSD node (GCE VM, e2-standard-2).
 spec:
   type: compute-node
-  owner: ceph-lab
+  owner: thump-test
   dependsOn:
     - resource:default/ceph-node-1-vdc
     - resource:default/ceph-node-1-vdd
@@ -161,7 +161,7 @@ metadata:
   description: k3s agent + Ceph OSD node (GCE VM, e2-standard-2).
 spec:
   type: compute-node
-  owner: ceph-lab
+  owner: thump-test
   dependsOn:
     - resource:default/ceph-node-2-vdc
     - resource:default/ceph-node-2-vdd
@@ -173,7 +173,7 @@ metadata:
   description: k3s agent + Ceph OSD node (GCE VM, e2-standard-2).
 spec:
   type: compute-node
-  owner: ceph-lab
+  owner: thump-test
   dependsOn:
     - resource:default/ceph-node-3-vdc
     - resource:default/ceph-node-3-vdd
@@ -185,7 +185,7 @@ metadata:
   description: Raw 5GiB OSD disk (/dev/vdc) on ceph-node-1.
 spec:
   type: disk
-  owner: ceph-lab
+  owner: thump-test
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Resource
@@ -194,7 +194,7 @@ metadata:
   description: Raw 5GiB OSD disk (/dev/vdd) on ceph-node-1.
 spec:
   type: disk
-  owner: ceph-lab
+  owner: thump-test
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Resource
@@ -203,7 +203,7 @@ metadata:
   description: Raw 5GiB OSD disk (/dev/vdc) on ceph-node-2.
 spec:
   type: disk
-  owner: ceph-lab
+  owner: thump-test
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Resource
@@ -212,7 +212,7 @@ metadata:
   description: Raw 5GiB OSD disk (/dev/vdd) on ceph-node-2.
 spec:
   type: disk
-  owner: ceph-lab
+  owner: thump-test
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Resource
@@ -221,7 +221,7 @@ metadata:
   description: Raw 5GiB OSD disk (/dev/vdc) on ceph-node-3.
 spec:
   type: disk
-  owner: ceph-lab
+  owner: thump-test
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Resource
@@ -230,4 +230,4 @@ metadata:
   description: Raw 5GiB OSD disk (/dev/vdd) on ceph-node-3.
 spec:
   type: disk
-  owner: ceph-lab
+  owner: thump-test

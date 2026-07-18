@@ -26,7 +26,7 @@ locals {
   gitops_ssh_key_content = fileexists("${path.module}/${var.gitops_ssh_key_path}") ? file("${path.module}/${var.gitops_ssh_key_path}") : ""
 
   # NOTE on these two templates: they are THIN wrappers only — write a small
-  # /etc/rook-gce-k3s.env (literal values already interpolated by Tofu, no
+  # /etc/thump-test.env (literal values already interpolated by Tofu, no
   # runtime bash expansion needed) plus the SSH deploy key if any, then git
   # clone this repo to /ceph-lab and exec the real, plain-bash, unmodified
   # provisioning/scripts/{control-plane,node}.sh. Deliberately NOT running the

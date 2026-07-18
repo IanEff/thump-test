@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Manage /etc/hosts entries for the rook-gce-k3s cluster's fixed hostnames.
+"""Manage /etc/hosts entries for the thump-test cluster's fixed hostnames.
 
 Replaces ceph-lab's dnsmasq_setup.sh/dnsmasq_teardown.sh: ceph-lab needed real
 wildcard (*.ceph.lab) resolution because Cilium's L2Announcement gave it a
@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 HOSTS_FILE = Path("/etc/hosts")
-DOMAIN = "ceph-gce.lab"
+DOMAIN = "thump-test.lab"
 HOSTNAMES = [
     f"argocd.{DOMAIN}",
     f"grafana.{DOMAIN}",
@@ -27,8 +27,8 @@ HOSTNAMES = [
     f"prometheus.{DOMAIN}",
 ]
 
-BEGIN_MARKER = "# BEGIN rook-gce-k3s"
-END_MARKER = "# END rook-gce-k3s"
+BEGIN_MARKER = "# BEGIN thump-test"
+END_MARKER = "# END thump-test"
 
 
 def _strip_managed_block(lines: list[str]) -> list[str]:
@@ -75,12 +75,12 @@ def remove() -> None:
     new_lines = _strip_managed_block(lines)
 
     if len(new_lines) == len(lines):
-        print("No rook-gce-k3s block found in /etc/hosts.")
+        print("No thump-test block found in /etc/hosts.")
         return
 
     content = "\n".join(new_lines).rstrip("\n") + "\n"
     HOSTS_FILE.write_text(content, encoding="utf-8")
-    print("Removed rook-gce-k3s block from /etc/hosts.")
+    print("Removed thump-test block from /etc/hosts.")
 
 
 def main() -> None:
