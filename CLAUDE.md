@@ -460,18 +460,26 @@ justfile
     "traffic-generator-bucket" not found`, and `just generate-traffic`
     times out on `kubectl rollout status` — while every ArgoCD-visible
     signal (`Application` health, OBC `Synced` state) looks completely
-    fine. There is no manifest-level fix available (no OBC/Rook field tunes
-    this controller's retry cadence), so unlike gotcha #18 this one can't be
-    fixed by committing a different retry budget — it's expected, one-time,
-    self-resolving-in-principle behavior on a fresh stand-up, just with an
-    inconveniently long/unclear actual retry window. **If `kubectl get obc
-    <name> -n <ns>` is stuck `Pending` and `kubectl describe cephobjectstore
-    -n rook-ceph` plus the RGW pod both look healthy, force an immediate
-    reconcile** with `kubectl annotate obc <name> -n <ns>
-    force-resync="$(date +%s)" --overwrite` — this only nudges Rook's own
-    controller to retry sooner against already-correct git-declared state,
-    it does not hand-patch any desired state, same category as the
-    `argocd app sync` exception gotcha #18 already carves out.
+    fine. There is no OBC/Rook field that tunes this controller's retry
+    cadence, so unlike gotcha #18 this can't be fixed by committing a
+    different Application-level retry budget — the underlying behavior is
+    still expected, one-time, self-resolving-in-principle on a fresh
+    stand-up, just with an inconveniently long/unclear actual retry window.
+
+    **As of 2026-07-18, this is automated** —
+    `applications/infrastructure/s3-traffic-generator/postsync-obc-resync.yaml`
+    is a PostSync hook Job (same pattern as gotcha #18's
+    `postsync-ceph-health.yaml`) that polls `traffic-generator-bucket`'s
+    `.status.phase` and re-issues `kubectl annotate obc
+    traffic-generator-bucket -n default force-resync="$(date +%s)"
+    --overwrite` every 20s until it reaches `Bound` or a 14-minute deadline
+    passes — this only nudges Rook's own controller to retry sooner against
+    already-correct git-declared state, it does not hand-patch any desired
+    state, same category as the `argocd app sync` exception gotcha #18
+    already carves out. `s3-traffic-generator` is the last sync wave (40),
+    so nothing downstream is gated by it. The manual command above still
+    works standalone if you ever need to nudge a differently-named OBC by
+    hand, or the hook's own deadline is exhausted.
 
 ## Everything else in `applications/` (Rook, Cilium base config, Sloth, l7-policies, dashboards)
 
