@@ -71,3 +71,26 @@ components:
     enabled: false
   llm:
     enabled: false
+  # flagd: read the flagd-config ConfigMap DIRECTLY instead of the chart's
+  # default "init container copies ConfigMap into a config-rw emptyDir, flagd
+  # reads the emptyDir" pattern. Why: the chaos scripts (and thump's actuator)
+  # flip a flag by patching that ConfigMap at runtime, and we need flagd to
+  # hot-reload IN PLACE so it pushes the change over consumers' live flag
+  # streams. The default pattern can't do that -- a ConfigMap patch never
+  # reaches the emptyDir copy, and restarting flagd to force a re-copy severs
+  # every consumer's stream, leaving them stale (verified live: product-catalog
+  # kept serving HTTP 200 on the failing product until it too was restarted).
+  # Mounting the ConfigMap directly lets flagd's file watcher pick up the
+  # kubelet's ConfigMap update and push it out with no restart anywhere.
+  #
+  # null (NOT []) is required to drop the chart-default lists: Helm coalesce
+  # silently ignores an empty list override but honors null as "remove key".
+  flagd:
+    mountedConfigMaps:
+      - name: config-ro
+        mountPath: /etc/flagd
+        existingConfigMap: flagd-config
+    mountedEmptyDirs: null   # drop config-rw (the emptyDir flagd used to read)
+    initContainers: null     # drop the ConfigMap->emptyDir copy step
+    additionalVolumes: null  # drop the now-redundant config-ro volume def
+    sidecarContainers: null  # drop flagd-ui (wrote to the emptyDir; moot now, frees 250Mi)
