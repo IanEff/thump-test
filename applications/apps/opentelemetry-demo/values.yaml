@@ -11,8 +11,17 @@
 # to land in Tempo + Prometheus.
 default:
   envOverrides:
+    # NOT "otel-collector" -- caught live via NXDOMAIN from inside the
+    # cluster. The otel-collector Application's Helm releaseName
+    # ("otel-collector") doesn't contain the chart name
+    # ("opentelemetry-collector"), so the chart's fullname template falls
+    # back to "<release>-<chart>" instead of just "<release>". Confirmed
+    # via `kubectl get svc -n tracing`: the real Service is
+    # otel-collector-opentelemetry-collector. The Wave 2 handoff doc's own
+    # "point the demo at otel-collector.tracing.svc.cluster.local" note was
+    # never actually checked against the live Service name -- it was wrong.
     - name: OTEL_COLLECTOR_NAME
-      value: otel-collector.tracing.svc.cluster.local
+      value: otel-collector-opentelemetry-collector.tracing.svc.cluster.local
 
 # Bundled dependency subcharts — all disabled, replaced by the rig's own
 # tracing/monitoring stack (otel-collector, tempo, prometheus, grafana).
