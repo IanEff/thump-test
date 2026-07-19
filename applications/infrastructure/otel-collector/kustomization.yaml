@@ -37,9 +37,27 @@ helmCharts:
             endpoint: "tempo.tracing.svc.cluster.local:4317"
             tls:
               insecure: true
+          prometheus:
+            endpoint: "0.0.0.0:8889"
+            resource_to_telemetry_conversion:
+              enabled: true
         service:
           pipelines:
             traces:
               receivers: [otlp, jaeger]
               processors: [batch]
               exporters: [otlp]
+            metrics:
+              receivers: [otlp]
+              processors: [batch]
+              exporters: [prometheus]
+      ports:
+        prometheus:
+          enabled: true
+          containerPort: 8889
+          servicePort: 8889
+          protocol: TCP
+      serviceMonitor:
+        enabled: true
+        metricsEndpoints:
+          - port: prometheus

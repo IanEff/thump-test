@@ -16,6 +16,7 @@ spec:
             - { port: "4317", protocol: TCP } # OTLP gRPC port
             - { port: "4318", protocol: TCP } # OTLP HTTP port
             - { port: "6831", protocol: UDP } # Jaeger UDP compact thrift
+            - { port: "8889", protocol: TCP } # OTel Collector Prometheus exporter (scraped by Prometheus)
     - fromEntities: [ host, remote-node ]
   egress:
     - toEndpoints:
