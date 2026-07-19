@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: otel-demo
+
+components:
+  - ../../config # injects OTELDEMO_HOSTNAME via replacement below
+
+helmCharts:
+  - name: opentelemetry-demo
+    repo: https://open-telemetry.github.io/opentelemetry-helm-charts
+    version: 0.40.10
+    releaseName: otel-demo
+    namespace: otel-demo
+    valuesFile: values.yaml
+
+# The HTTPRoute hostname is patched by config/kustomization.yaml replacements
+# (OTELDEMO_HOSTNAME → spec.hostnames.0), same pattern as grafana/httproute.yaml.
+resources:
+  - httproute.yaml

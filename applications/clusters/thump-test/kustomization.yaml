@@ -20,3 +20,7 @@ resources:
   # s3-traffic-generator.yaml; `just generate-traffic` needs to drift live
   # replica count without ArgoCD fighting it)
   - s3-traffic-generator.yaml
+
+  # OTel demo (wave 50): the second, orthogonal application domain. Syncs
+  # last, after obs + Ceph + policies have settled.
+  - apps-set.yaml

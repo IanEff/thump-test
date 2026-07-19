@@ -1,0 +1,6 @@
+{
+  "appName": "opentelemetry-demo",
+  "syncWave": "50",
+  "namespace": "otel-demo",
+  "localPath": "applications/apps/opentelemetry-demo"
+}

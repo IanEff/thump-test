@@ -91,6 +91,7 @@ Once `just up` finishes, these resolve via the `/etc/hosts` entries
 | Ceph Dashboard | https://dashboard.thump-test.lab |
 | Hubble UI | https://hubble.thump-test.lab |
 | Prometheus | https://prometheus.thump-test.lab |
+| OTel demo | https://otel-demo.thump-test.lab |
 
 ## Capacity (Wave 0b measure-then-size)
 
@@ -140,6 +141,50 @@ spread further), so "PGs per OSD" degenerates to the cluster-wide `pg_num`
 total — tripped Ceph's default 250 ceiling (`applications/rook/cluster/cephcluster.yaml`'s
 `mon_max_pg_per_osd: "400"` fix). Re-measure with `kubectl describe node`
 after any future bring-up before trusting this number over a fresh one.
+
+## OTel demo trim (Wave 3)
+
+`open-telemetry/opentelemetry-demo` chart `0.40.10` (`appVersion 2.2.0`) ships 22 components.
+**Confirmed via `helm show values`: none of them set `resources.requests.cpu`** (only
+`resources.limits.memory`), so — unlike Ceph — the demo doesn't draw down the CPU-*request*
+headroom measured above at all; the scheduler sees 0m requested per demo pod regardless of how
+many are enabled. The trim below is therefore driven by real CPU/memory usage under sustained
+`load-generator` traffic and by keeping the failure surface small and connected (per the mission
+guide's "the failure surface = the remediation surface"), not by the CPU-request quota fight.
+
+**Enabled** (16 components — the full core shopping path, every service reachable from
+`frontend`/`frontend-proxy` on the buy flow, plus the two required infra pieces):
+`flagd`, `frontend-proxy`, `frontend`, `image-provider`, `load-generator`, `ad`, `cart`,
+`valkey-cart`, `checkout`, `currency`, `email`, `payment`, `product-catalog`, `quote`,
+`recommendation`, `shipping`, `kafka`.
+
+`kafka` looked droppable at first (nothing on the core path *consumes* from it) but `checkout`
+ships a `wait-for-kafka` initContainer that blocks pod startup until `kafka:9092` is reachable —
+so it's a hard dependency of `checkout`, not optional, confirmed by reading the chart's
+`values.yaml` rather than assumed.
+
+**Disabled** (`components.<name>.enabled: false` — true leaves, nothing else in the enabled set
+depends on them): `accounting`, `fraud-detection` (both are `kafka` consumers only — the only
+resources with anything left connected to them once disabled), `product-reviews`, `llm`,
+`postgresql` (the `product-reviews`→`llm`+`postgresql` chain is the demo's newest, heaviest
+feature — a whole DB + LLM-mock pod for one leaf feature panel on the product page). **Verify live
+in Phase 5 that `frontend`'s product page doesn't hard-error with `product-reviews` absent** —
+assumed graceful-degrade based on the chart's own component graph (nothing else calls it back),
+not confirmed against frontend source.
+
+Chosen against the CLAUDE.md §10 flagd-flag recommendation (verified live against this exact
+chart's `flagd/demo.flagd.json` — flag names don't drift from what CLAUDE.md assumed): three
+candidate flags, all on services kept enabled above —
+- `productCatalogFailure` (availability) → `product-catalog`.
+- `recommendationCacheFailure` (latency/saturation) → `recommendation` (depends on
+  `product-catalog`, so both flags share a service dependency — deliberate, tests that thump's
+  catalog action for one doesn't get confused with the other).
+- `cartFailure` **and** `failedReadinessProbe` both target `cart` — the "second action plausible"
+  case CLAUDE.md §10 asked for: a `cart` failure could plausibly be remediated either by disabling
+  the armed flag *or* by restarting/rescheduling the pod (a readiness-probe failure looks like a
+  crash-loop from outside, not obviously a feature flag), giving Wave 6's ranker a real choice
+  between two catalog actions. Final flag arming decision still belongs to Wave 4 — this just
+  confirms the trimmed demo doesn't accidentally disable a service Wave 4 would need.
 
 ## Bringing your own app
 

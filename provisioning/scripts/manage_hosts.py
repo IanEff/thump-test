@@ -25,6 +25,7 @@ HOSTNAMES = [
     f"dashboard.{DOMAIN}",
     f"hubble.{DOMAIN}",
     f"prometheus.{DOMAIN}",
+    f"otel-demo.{DOMAIN}",
 ]
 
 BEGIN_MARKER = "# BEGIN thump-test"

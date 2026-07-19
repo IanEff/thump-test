@@ -1,0 +1,44 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: apps-set
+  namespace: argocd
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/IanEff/thump-test.git
+        revision: HEAD
+        files:
+          - path: applications/apps/**/config.json
+  template:
+    metadata:
+      name: "{{appName}}"
+      namespace: argocd
+      annotations:
+        argocd.argoproj.io/sync-wave: "{{syncWave}}"
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/IanEff/thump-test.git
+        targetRevision: HEAD
+        path: "{{localPath}}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{namespace}}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        # Same CRD-registration race infra-set.yaml/rook-set.yaml document —
+        # opentelemetry-demo's ServiceMonitor (io.opentelemetry demo chart's
+        # own scrape annotations aside, kube-prometheus-stack CRDs) can lose
+        # a race against prometheus-operator-crds on a from-scratch sync.
+        retry:
+          limit: 10
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 3m

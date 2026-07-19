@@ -1,0 +1,31 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: opentelemetry-demo
+  namespace: otel-demo
+spec:
+  hostnames:
+    - "otel-demo.ceph.lab" # patched from OTELDEMO_HOSTNAME via Kustomize
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: cilium-gateway
+      namespace: kube-system
+      sectionName: http
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - group: ""
+          kind: Service
+          # frontend-proxy (Envoy) is the demo's single entry point — proxies
+          # to frontend, image-provider, and the load-generator UI by path.
+          # Bare service name (no Helm release prefix): confirmed via the
+          # chart's templates/_objects.tpl, metadata.name: {{ .name }} uses
+          # the raw component key, matching the same bare names components
+          # reference each other by internally (e.g. CART_ADDR: cart:8080).
+          name: frontend-proxy
+          port: 8080
+          weight: 1

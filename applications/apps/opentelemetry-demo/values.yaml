@@ -1,0 +1,54 @@
+# Values for the open-telemetry/opentelemetry-demo chart, modeled on
+# ~/projects/infra/learning/Observability-with-Grafana/OTEL-Demo.yaml (that
+# reference predates this chart's `opensearch` dependency — verified live
+# against this exact chart version's values.yaml/Chart.yaml before trusting
+# it; opensearch.enabled defaults to true and had to be added here).
+#
+# Point the demo's OTLP exporters at the rig's existing collector instead of
+# the chart's own bundled one (disabled below) — that collector now carries
+# both the traces pipeline (Wave 1) and the Prometheus metrics pipeline
+# (Wave 2), so no further collector-side work is needed for demo telemetry
+# to land in Tempo + Prometheus.
+default:
+  envOverrides:
+    - name: OTEL_COLLECTOR_NAME
+      value: otel-collector.tracing.svc.cluster.local
+
+# Bundled dependency subcharts — all disabled, replaced by the rig's own
+# tracing/monitoring stack (otel-collector, tempo, prometheus, grafana).
+opentelemetry-collector:
+  enabled: false
+
+jaeger:
+  enabled: false
+
+prometheus:
+  enabled: false
+
+grafana:
+  enabled: false
+
+# Not in the reference values file (added to the chart after it was
+# written) — confirmed via Chart.yaml's dependencies list + values.yaml's
+# own `opensearch.enabled: true` default (1100Mi memory limit). Only
+# consumed by the collector's log-export pipeline and the grafana
+# opensearch datasource, both already disabled above, so this has no
+# in-cluster consumer left once those two are off. Loki already covers logs
+# for this rig.
+opensearch:
+  enabled: false
+
+# Wave 3 demo trim (see README.md's "OTel demo trim" section for the full
+# call-graph rationale): keep the connected core shopping path + the
+# services covering the CLAUDE.md §10 flagd-flag picks, disable true leaves.
+components:
+  accounting:
+    enabled: false
+  fraud-detection:
+    enabled: false
+  product-reviews:
+    enabled: false
+  llm:
+    enabled: false
+  postgresql:
+    enabled: false

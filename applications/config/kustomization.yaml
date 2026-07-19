@@ -97,3 +97,14 @@ replacements:
           name: prometheus
         fieldPaths:
           - spec.hostnames.0
+
+  - source:
+      kind: ConfigMap
+      name: cluster-config
+      fieldPath: data.OTELDEMO_HOSTNAME
+    targets:
+      - select:
+          kind: HTTPRoute
+          name: opentelemetry-demo
+        fieldPaths:
+          - spec.hostnames.0
