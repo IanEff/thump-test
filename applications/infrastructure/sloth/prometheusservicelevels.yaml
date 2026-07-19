@@ -356,21 +356,29 @@ spec:
     - name: availability
       objective: 99
       description: >-
-        99% of cart requests succeed. Backed by app_frontend_requests_total
-        scoped to target="/api/cart" — the frontend route whose backing cart
-        RPCs (GetCart/AddItem) the cartFailure flag makes error. Verified live
-        (Wave 4): cart health goes Unhealthy under the flag; at baseline this
-        cluster emits NO status="500" series for /api/cart at all (error rate a
-        clean 0). Events-ratio SLI, same shape as product-catalog-availability
-        and ceph-rgw-availability. This is also the ranker's two-eligible-action
-        case: cartFailure is remediable by either restart-pod OR disable-flag,
-        but only the flag flip actually clears it (the fault is flag state, not
-        pod state), so thump must prefer the reversible flag action.
-        Chaos: chaos/flag-cart-on.sh / -off.sh (cartFailure).
+        99% of cart-service RPCs succeed, measured from the checkout service's
+        gRPC client to oteldemo.CartService (rpc_grpc_status_code != "0" = an
+        errored call). SIGNAL CORRECTED 2026-07-19 after live verification: the
+        cartFailure flag does NOT surface as a frontend HTTP 500 — the frontend's
+        GET /api/cart tolerates the fault (stays 200), so the original
+        app_frontend_requests_total{target="/api/cart"} scope never burned under
+        chaos. What the flag actually breaks is cart's EmptyCart RPC (returns
+        gRPC status 9 FAILED_PRECONDITION), and the only in-cluster view of
+        cart's own RPC health is its CALLER: checkout emits
+        rpc_client_duration_milliseconds{rpc_service="oteldemo.CartService"} with
+        an rpc_grpc_status_code label (the cart .NET service itself emits no
+        rpc_server_duration, and the frontend emits no rpc_client series — only
+        checkout does). Verified live: baseline error ratio 0 (all status 0),
+        cartFailure ON → EmptyCart status 9 → ratio ~0.4-0.5. Events-ratio SLI,
+        same shape as product-catalog-availability. This is also the ranker's
+        two-eligible-action case: cartFailure is remediable by either restart-pod
+        OR disable-flag, but only the flag flip actually clears it (the fault is
+        flag state, not pod state), so thump must prefer the reversible flag
+        action. Chaos: chaos/flag-cart-on.sh / -off.sh (cartFailure).
       sli:
         events:
-          errorQuery: sum(rate(app_frontend_requests_total{target="/api/cart",status="500"}[{{.window}}]))
-          totalQuery: sum(rate(app_frontend_requests_total{target="/api/cart"}[{{.window}}]))
+          errorQuery: sum(rate(rpc_client_duration_milliseconds_count{service_name="checkout",rpc_service="oteldemo.CartService",rpc_grpc_status_code!="0"}[{{.window}}]))
+          totalQuery: sum(rate(rpc_client_duration_milliseconds_count{service_name="checkout",rpc_service="oteldemo.CartService"}[{{.window}}]))
       alerting:
         name: CartAvailabilitySLO
         labels:

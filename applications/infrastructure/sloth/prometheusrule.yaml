@@ -1107,9 +1107,9 @@ spec:
     - name: sloth-slo-sli-recordings-cart-availability
       rules:
         - expr: |
-            (sum(rate(app_frontend_requests_total{target="/api/cart",status="500"}[5m])))
+            (sum(rate(rpc_client_duration_milliseconds_count{service_name="checkout",rpc_service="oteldemo.CartService",rpc_grpc_status_code!="0"}[5m])))
             /
-            (sum(rate(app_frontend_requests_total{target="/api/cart"}[5m])))
+            (sum(rate(rpc_client_duration_milliseconds_count{service_name="checkout",rpc_service="oteldemo.CartService"}[5m])))
           labels:
             domain: otel-demo
             lab: thump-test
@@ -1119,9 +1119,9 @@ spec:
             sloth_window: 5m
           record: slo:sli_error:ratio_rate5m
         - expr: |
-            (sum(rate(app_frontend_requests_total{target="/api/cart",status="500"}[30m])))
+            (sum(rate(rpc_client_duration_milliseconds_count{service_name="checkout",rpc_service="oteldemo.CartService",rpc_grpc_status_code!="0"}[30m])))
             /
-            (sum(rate(app_frontend_requests_total{target="/api/cart"}[30m])))
+            (sum(rate(rpc_client_duration_milliseconds_count{service_name="checkout",rpc_service="oteldemo.CartService"}[30m])))
           labels:
             domain: otel-demo
             lab: thump-test
@@ -1131,9 +1131,9 @@ spec:
             sloth_window: 30m
           record: slo:sli_error:ratio_rate30m
         - expr: |
-            (sum(rate(app_frontend_requests_total{target="/api/cart",status="500"}[1h])))
+            (sum(rate(rpc_client_duration_milliseconds_count{service_name="checkout",rpc_service="oteldemo.CartService",rpc_grpc_status_code!="0"}[1h])))
             /
-            (sum(rate(app_frontend_requests_total{target="/api/cart"}[1h])))
+            (sum(rate(rpc_client_duration_milliseconds_count{service_name="checkout",rpc_service="oteldemo.CartService"}[1h])))
           labels:
             domain: otel-demo
             lab: thump-test
@@ -1143,9 +1143,9 @@ spec:
             sloth_window: 1h
           record: slo:sli_error:ratio_rate1h
         - expr: |
-            (sum(rate(app_frontend_requests_total{target="/api/cart",status="500"}[2h])))
+            (sum(rate(rpc_client_duration_milliseconds_count{service_name="checkout",rpc_service="oteldemo.CartService",rpc_grpc_status_code!="0"}[2h])))
             /
-            (sum(rate(app_frontend_requests_total{target="/api/cart"}[2h])))
+            (sum(rate(rpc_client_duration_milliseconds_count{service_name="checkout",rpc_service="oteldemo.CartService"}[2h])))
           labels:
             domain: otel-demo
             lab: thump-test
@@ -1155,9 +1155,9 @@ spec:
             sloth_window: 2h
           record: slo:sli_error:ratio_rate2h
         - expr: |
-            (sum(rate(app_frontend_requests_total{target="/api/cart",status="500"}[6h])))
+            (sum(rate(rpc_client_duration_milliseconds_count{service_name="checkout",rpc_service="oteldemo.CartService",rpc_grpc_status_code!="0"}[6h])))
             /
-            (sum(rate(app_frontend_requests_total{target="/api/cart"}[6h])))
+            (sum(rate(rpc_client_duration_milliseconds_count{service_name="checkout",rpc_service="oteldemo.CartService"}[6h])))
           labels:
             domain: otel-demo
             lab: thump-test
@@ -1167,9 +1167,9 @@ spec:
             sloth_window: 6h
           record: slo:sli_error:ratio_rate6h
         - expr: |
-            (sum(rate(app_frontend_requests_total{target="/api/cart",status="500"}[1d])))
+            (sum(rate(rpc_client_duration_milliseconds_count{service_name="checkout",rpc_service="oteldemo.CartService",rpc_grpc_status_code!="0"}[1d])))
             /
-            (sum(rate(app_frontend_requests_total{target="/api/cart"}[1d])))
+            (sum(rate(rpc_client_duration_milliseconds_count{service_name="checkout",rpc_service="oteldemo.CartService"}[1d])))
           labels:
             domain: otel-demo
             lab: thump-test
@@ -1179,9 +1179,9 @@ spec:
             sloth_window: 1d
           record: slo:sli_error:ratio_rate1d
         - expr: |
-            (sum(rate(app_frontend_requests_total{target="/api/cart",status="500"}[3d])))
+            (sum(rate(rpc_client_duration_milliseconds_count{service_name="checkout",rpc_service="oteldemo.CartService",rpc_grpc_status_code!="0"}[3d])))
             /
-            (sum(rate(app_frontend_requests_total{target="/api/cart"}[3d])))
+            (sum(rate(rpc_client_duration_milliseconds_count{service_name="checkout",rpc_service="oteldemo.CartService"}[3d])))
           labels:
             domain: otel-demo
             lab: thump-test
