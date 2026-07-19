@@ -59,9 +59,9 @@ variable "node_machine_type_overrides" {
 }
 
 variable "boot_disk_size_gb" {
-  description = "Boot disk size for every instance. Sized to comfortably hold /var/lib/rancher (k3s data dir) on the boot disk itself — no separate Lima-style 'rancher' data disk is needed on GCE."
+  description = "Boot disk size for every instance. Sized to comfortably hold /var/lib/rancher (k3s data dir) on the boot disk itself — no separate Lima-style 'rancher' data disk is needed on GCE. Bumped 30→50: with the OTel demo's ~18 pods of images landing on the workers alongside Ceph+obs, the 30GB disk sat at ~72% used, tripping Ceph's mon_data_avail_warn (fires <30% avail). +20GB×4 nodes is ~\\$3/mo of pd-standard."
   type        = number
-  default     = 30
+  default     = 50
 }
 
 variable "allowed_source_ranges" {
