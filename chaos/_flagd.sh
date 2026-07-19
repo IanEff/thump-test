@@ -1,27 +1,30 @@
 # Shared helpers for the flagd chaos scripts. Sourced, not executed.
 #
-# Mechanism (verified against chart opentelemetry-demo 0.40.10 / flagd v0.12.9):
-# the demo's flag definitions live in the `flagd-config` ConfigMap (namespace
-# otel-demo, data key `demo.flagd.json`). flagd is started with
-# `--uri file:./etc/flagd/demo.flagd.json`, but that file is NOT the ConfigMap
-# mount -- an init container copies the ConfigMap into a `config-rw` emptyDir at
-# pod start, and flagd reads the emptyDir copy (the flagd-ui sidecar writes to
-# the same emptyDir). So a bare `kubectl patch configmap flagd-config` does NOT
-# reach the running flagd: the emptyDir copy is only refreshed when the init
-# container re-runs, i.e. on a flagd pod restart. We therefore patch the
-# ConfigMap AND `rollout restart deployment/flagd`.
+# Mechanism (verified live against chart opentelemetry-demo 0.40.10 / flagd
+# v0.12.9): the demo's flag definitions live in the `flagd-config` ConfigMap
+# (namespace otel-demo, data key `demo.flagd.json`, a single embedded JSON blob).
+# We flip a flag by rewriting that blob's `defaultVariant` for one flag. Two
+# pieces of rig config make a bare `kubectl patch` actually take effect:
 #
-# NOTE for the thump actuator track (thump repo, CLAUDE.md §8): §8 assumes
-# "flip flagd flag = merge-patch the flagd ConfigMap" with no-restart hot-reload.
-# That is NOT true of this deployment as-shipped (the emptyDir-copy indirection
-# above). Either the actuator restarts flagd like these scripts do, or the flagd
-# component is restructured to mount `flagd-config` directly (the chart supports
-# it via components.flagd.mountedConfigMaps{existingConfigMap: flagd-config}) so
-# a ConfigMap patch hot-reloads with no restart. See chaos/README.md.
+#   1. flagd mounts `flagd-config` DIRECTLY (values.yaml overrides
+#      components.flagd to drop the chart's default init-container-copy-into-
+#      emptyDir wiring). So a ConfigMap patch reaches flagd's file, and flagd's
+#      file watcher hot-reloads it IN PLACE -- no pod restart -- then pushes the
+#      change over consumers' live flag streams. Verified: patch on -> target
+#      product 500 at ~t+40s; patch off -> back to 200; flagd restarts stay 0.
+#   2. ArgoCD ignoreDifferences on /data/demo.flagd.json (apps-set.yaml) stops
+#      selfHeal from reverting the runtime flip back to the git "all off" state.
 #
-# Also note: `demo.flagd.json` is a single embedded JSON blob inside one
-# ConfigMap key, so this is a read-modify-write (get -> jq one field -> put the
-# whole blob back), not a partial strategic merge of individual flags.
+# `demo.flagd.json` is one blob in one ConfigMap key, so flag_set is a
+# read-modify-write (get -> jq one defaultVariant -> put the whole blob back),
+# not a partial strategic merge. This is the same mechanism thump's actuator
+# (thump repo, CLAUDE.md §8) uses; §8's "merge-patch the ConfigMap" holds now
+# that both pieces above are in place.
+#
+# Propagation is not instant: the kubelet syncs the mounted ConfigMap on its
+# own period (~30-60s) before flagd sees the change. That's fine -- the chaos
+# timing discipline wants fault duration > pipeline latency anyway -- but don't
+# expect the demo to degrade the instant this returns.
 
 set -euo pipefail
 
@@ -33,7 +36,7 @@ FLAGD_CONFIG_KEY="demo.flagd.json"
 kc() { kubectl --context "$KUBE_CONTEXT" -n "$FLAGD_NAMESPACE" "$@"; }
 
 # flag_set <flagName> <variant>
-# Flip one flag's defaultVariant and make the running flagd pick it up.
+# Flip one flag's defaultVariant. flagd hot-reloads it (no restart, ~30-60s).
 flag_set() {
   local flag="$1" variant="$2" current updated patch
 
@@ -43,9 +46,12 @@ flag_set() {
     | jq -r --arg k "$FLAGD_CONFIG_KEY" '.data[$k]')" \
     || { echo "ERROR: cannot read $FLAGD_CONFIGMAP/$FLAGD_CONFIG_KEY (is the demo up?)" >&2; exit 1; }
 
-  echo "$current" | jq -e --arg f "$flag" '.flags[$f]' >/dev/null \
+  # Use `has` for existence, not the value itself: `jq -e` exits non-zero when
+  # the output is false/null, and the "off" variant's value is literally false,
+  # so `jq -e '.flags[$f].variants[$v]'` would wrongly reject a valid "off".
+  echo "$current" | jq -e --arg f "$flag" '.flags | has($f)' >/dev/null \
     || { echo "ERROR: flag '$flag' not defined in $FLAGD_CONFIG_KEY" >&2; exit 1; }
-  echo "$current" | jq -e --arg f "$flag" --arg v "$variant" '.flags[$f].variants[$v]' >/dev/null \
+  echo "$current" | jq -e --arg f "$flag" --arg v "$variant" '.flags[$f].variants | has($v)' >/dev/null \
     || { echo "ERROR: variant '$variant' not defined for flag '$flag'" >&2; exit 1; }
 
   updated="$(echo "$current" | jq -c --arg f "$flag" --arg v "$variant" '.flags[$f].defaultVariant=$v')"
@@ -53,10 +59,7 @@ flag_set() {
 
   echo ">> patching $FLAGD_CONFIGMAP: flags.$flag.defaultVariant = \"$variant\""
   kc patch configmap "$FLAGD_CONFIGMAP" --type merge -p "$patch"
-
-  echo ">> restarting flagd so its init container re-copies the patched config"
-  kc rollout restart deployment/flagd
-  kc rollout status deployment/flagd --timeout=120s
-
-  echo ">> done: flagd flag '$flag' is now '$variant'"
+  echo ">> done. flagd will hot-reload in place (no restart) once the kubelet"
+  echo "   propagates the ConfigMap update -- allow ~30-60s before the demo"
+  echo "   reflects flag '$flag' = '$variant'."
 }
