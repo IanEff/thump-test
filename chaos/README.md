@@ -48,6 +48,16 @@ reads the emptyDir copy, not the ConfigMap. So `flag_set` patches the ConfigMap
 **and `rollout restart deployment/flagd`** so the init container re-copies the
 patched blob. Confirmed against chart 0.40.10.
 
+## ArgoCD self-heal reverts flips — handled in apps-set.yaml
+
+The `opentelemetry-demo` Application runs `automated.selfHeal: true`, and
+`flagd-config` is chart-managed, so a bare `kubectl patch` gets reverted to the
+git desired-state ("all flags off") within seconds — the flip never sticks.
+Fixed by `ignoreDifferences` on `flagd-config`'s `/data/demo.flagd.json` (plus
+`RespectIgnoreDifferences=true`) in
+`applications/clusters/thump-test/apps-set.yaml`, so ArgoCD treats that one key
+as runtime-owned. This applies to thump's actuator too, not just these scripts.
+
 ## ⚠️ Follow-ups
 
 1. **Live-verify each pair** on the next bring-up (this was authored offline

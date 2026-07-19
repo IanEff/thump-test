@@ -25,6 +25,21 @@ spec:
       destination:
         server: https://kubernetes.default.svc
         namespace: "{{namespace}}"
+      # flagd flag state is runtime-mutable by design: the chaos/ scripts (and,
+      # later, thump's actuator, thump repo CLAUDE.md §8) flip flags by writing
+      # the flagd-config ConfigMap's demo.flagd.json blob at runtime. Without
+      # this, ArgoCD selfHeal reverts every flip within seconds (the demo's
+      # desired state in git is "all flags off"). Ignore drift on just that one
+      # key so runtime flips survive; RespectIgnoreDifferences keeps even an
+      # explicit sync from clobbering them. Scoped to flagd-config/otel-demo, so
+      # it's a no-op for any other app this ApplicationSet generates.
+      ignoreDifferences:
+        - group: ""
+          kind: ConfigMap
+          name: flagd-config
+          namespace: otel-demo
+          jsonPointers:
+            - /data/demo.flagd.json
       syncPolicy:
         automated:
           prune: true
@@ -32,6 +47,7 @@ spec:
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true
+          - RespectIgnoreDifferences=true
         # Same CRD-registration race infra-set.yaml/rook-set.yaml document —
         # opentelemetry-demo's ServiceMonitor (io.opentelemetry demo chart's
         # own scrape annotations aside, kube-prometheus-stack CRDs) can lose
