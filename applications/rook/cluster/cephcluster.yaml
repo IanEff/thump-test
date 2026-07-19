@@ -71,6 +71,13 @@ spec:
       # away -- raise the ceiling instead of fighting per-pool floors that
       # exist for good reasons (rgw index/log pool parallelism, etc).
       mon_max_pg_per_osd: "400"
+    # mon_max_pg_per_osd is a [mgr,mon] option (per `ceph config help`) — the
+    # PG_TOO_MANY_PER_OSD warning in `ceph status` is computed by the mgr's
+    # own copy of this setting, not the mon's. Setting it only on mon: left
+    # the mgr on the default 250, so HEALTH_WARN fired anyway at 3 OSDs even
+    # though the mon-side ceiling was correctly raised.
+    mgr:
+      mon_max_pg_per_osd: "400"
     osd:
       osd_max_backfills: "1"
       osd_recovery_max_active: "1"
