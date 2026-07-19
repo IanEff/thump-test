@@ -41,6 +41,18 @@ opensearch:
 # Wave 3 demo trim (see README.md's "OTel demo trim" section for the full
 # call-graph rationale): keep the connected core shopping path + the
 # services covering the CLAUDE.md §10 flagd-flag picks, disable true leaves.
+#
+# postgresql stays enabled (chart default) even though it was only ever
+# meant to back the disabled product-reviews/accounting components — caught
+# live in Phase 5 verification: product-catalog itself (a flag target, not
+# a leaf) also has a hard DB_CONNECTION_STRING dependency on postgresql in
+# this chart version (2.2.0 stores the catalog in Postgres, not a static
+# file like older versions). Without it product-catalog crash-loops
+# instantly (empty logs, exit 1) with no indication in values.yaml alone —
+# only found by watching `kubectl get pods -n otel-demo` after a live sync,
+# exactly the kind of thing CLAUDE.md's "verify live, don't assume" rule is
+# for. accounting/product-reviews/llm stay disabled; postgresql just also
+# serves product-catalog now.
 components:
   accounting:
     enabled: false
@@ -49,6 +61,4 @@ components:
   product-reviews:
     enabled: false
   llm:
-    enabled: false
-  postgresql:
     enabled: false

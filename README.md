@@ -152,25 +152,33 @@ many are enabled. The trim below is therefore driven by real CPU/memory usage un
 `load-generator` traffic and by keeping the failure surface small and connected (per the mission
 guide's "the failure surface = the remediation surface"), not by the CPU-request quota fight.
 
-**Enabled** (16 components — the full core shopping path, every service reachable from
-`frontend`/`frontend-proxy` on the buy flow, plus the two required infra pieces):
+**Enabled** (17 components — the full core shopping path, every service reachable from
+`frontend`/`frontend-proxy` on the buy flow, plus the required infra pieces):
 `flagd`, `frontend-proxy`, `frontend`, `image-provider`, `load-generator`, `ad`, `cart`,
 `valkey-cart`, `checkout`, `currency`, `email`, `payment`, `product-catalog`, `quote`,
-`recommendation`, `shipping`, `kafka`.
+`recommendation`, `shipping`, `kafka`, `postgresql`.
 
 `kafka` looked droppable at first (nothing on the core path *consumes* from it) but `checkout`
 ships a `wait-for-kafka` initContainer that blocks pod startup until `kafka:9092` is reachable —
 so it's a hard dependency of `checkout`, not optional, confirmed by reading the chart's
 `values.yaml` rather than assumed.
 
+`postgresql` was originally trimmed too (see below) but had to be added back — **caught live, not
+by reading values.yaml**: `product-catalog` crash-loops instantly (empty logs, exit 1) without it.
+This chart version (`appVersion 2.2.0`) stores the catalog in Postgres rather than a static file
+like older versions did; `product-catalog`'s own `env:` block sets `DB_CONNECTION_STRING` same as
+`accounting`/`product-reviews` do, a dependency that isn't obvious from the component's name and
+that the static `values.yaml` read alone missed. `product-catalog` is a non-negotiable flag target
+(§10's `productCatalogFailure`), so `postgresql` stays enabled to serve it even though its other
+two former dependents (`accounting`, `product-reviews`) are disabled.
+
 **Disabled** (`components.<name>.enabled: false` — true leaves, nothing else in the enabled set
-depends on them): `accounting`, `fraud-detection` (both are `kafka` consumers only — the only
-resources with anything left connected to them once disabled), `product-reviews`, `llm`,
-`postgresql` (the `product-reviews`→`llm`+`postgresql` chain is the demo's newest, heaviest
-feature — a whole DB + LLM-mock pod for one leaf feature panel on the product page). **Verify live
-in Phase 5 that `frontend`'s product page doesn't hard-error with `product-reviews` absent** —
-assumed graceful-degrade based on the chart's own component graph (nothing else calls it back),
-not confirmed against frontend source.
+depends on them): `accounting`, `fraud-detection` (both are `kafka` consumers only), `product-reviews`,
+`llm` (the `product-reviews`→`llm` chain is the demo's newest feature — an LLM-mock pod for one
+leaf feature panel on the product page). `product-catalog`'s own crash-loop above is a reminder not
+to trust this list without a live check — confirmed live in Phase 5 that `frontend`'s product page
+loads fine with `product-reviews` absent (no hard error), not just inferred from the chart's
+component graph.
 
 Chosen against the CLAUDE.md §10 flagd-flag recommendation (verified live against this exact
 chart's `flagd/demo.flagd.json` — flag names don't drift from what CLAUDE.md assumed): three
