@@ -194,6 +194,20 @@ candidate flags, all on services kept enabled above —
   between two catalog actions. Final flag arming decision still belongs to Wave 4 — this just
   confirms the trimmed demo doesn't accidentally disable a service Wave 4 would need.
 
+**Verified live end-to-end on 2026-07-19**, after fixing one more thing the values file alone
+couldn't catch: the demo's `OTEL_COLLECTOR_NAME` override initially pointed at
+`otel-collector.tracing.svc.cluster.local`, which is `NXDOMAIN` — the otel-collector
+Application's Helm `releaseName` (`otel-collector`) doesn't contain its chart name
+(`opentelemetry-collector`), so the chart's fullname template falls back to
+`<release>-<chart>`. The real Service, confirmed via `kubectl get svc -n tracing`, is
+`otel-collector-opentelemetry-collector` — fixed in `values.yaml`. After that: all 18 `otel-demo`
+pods `Running`, `product-catalog`'s DB queries and `frontend`'s `/api/products` + individual
+product pages all return real `200`s, `load-generator` traces (`user_index`,
+`user_get_recommendations`, ...) queryable in Tempo, and OTLP demo metrics
+(`app_frontend_requests_total`, `http_server_duration_milliseconds_bucket`,
+`rpc_server_duration_milliseconds_*`, ...) queryable in Prometheus — closing the loop Wave 2 left
+open (its own DoD was explicitly deferred until a metrics-emitting workload existed).
+
 ## Bringing your own app
 
 The point of this rig is to give a Tiltfile-driven dev loop something
