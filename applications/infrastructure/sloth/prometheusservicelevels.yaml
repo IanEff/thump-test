@@ -286,3 +286,98 @@ spec:
         ticketAlert:
           labels:
             severity: warning
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# OTel demo SLOs (Wave 5) — the second, Ceph-orthogonal domain. Each is backed
+# by one armed flagd chaos flag (chaos/flag-*.sh) whose ON = inject / OFF = fix,
+# so every burn is cleanly reversible by the same switch thump will flip.
+# METRIC NAMES VERIFIED LIVE 2026-07-19 against thump-test's real scrape
+# (`curl .../api/v1/label/__name__/values` + `.../api/v1/series`): the OTel
+# demo exports app_frontend_requests_total{target,status} (the frontend's own
+# per-route request counter) — the OTLP→prometheus exporter did NOT rename it.
+# One orthogonal SLO per service, no catch-all frontend SLO: the Wave-3 trim
+# leaves product-reviews/llm disabled while the frontend still calls
+# /api/product-reviews/* and /api/product-ask-ai-assistant/*, so those 500
+# CONSTANTLY at baseline — a frontend-wide error rate would burn with no chaos.
+# Scope is therefore per-target (see demo-chaos-signals notes).
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: sloth.slok.dev/v1
+kind: PrometheusServiceLevel
+metadata:
+  name: product-catalog-availability
+  namespace: monitoring
+spec:
+  service: product-catalog
+  labels:
+    lab: thump-test
+    domain: otel-demo
+  slos:
+    - name: availability
+      objective: 99
+      description: >-
+        99% of product-detail requests for the chaos-target product succeed.
+        Backed by the frontend's own app_frontend_requests_total counter,
+        scoped to target="/api/products/OLJCESPC7Z" — the exact product id the
+        productCatalogFailure flag makes GetProduct error on (verified live in
+        Wave 4: flag ON → HTTP 500 on that target at ~t+40s, a control product
+        stays 200). Scoped to the single fault target on purpose: the fault
+        only errors that one id, so a wider /api/products.* scope would dilute
+        the burn with all the still-200 products. Events-ratio SLI (real
+        error-events / total-events fraction, the proven ceph-rgw-availability
+        shape) — not a raw ratio fed into burn math. Only populates while the
+        loadgenerator is browsing that product; baseline error rate is 0.
+        Chaos: chaos/flag-product-catalog-on.sh / -off.sh (productCatalogFailure).
+      sli:
+        events:
+          errorQuery: sum(rate(app_frontend_requests_total{target="/api/products/OLJCESPC7Z",status="500"}[{{.window}}]))
+          totalQuery: sum(rate(app_frontend_requests_total{target="/api/products/OLJCESPC7Z"}[{{.window}}]))
+      alerting:
+        name: ProductCatalogAvailabilitySLO
+        labels:
+          severity: critical
+        pageAlert:
+          labels:
+            severity: critical
+        ticketAlert:
+          labels:
+            severity: warning
+---
+apiVersion: sloth.slok.dev/v1
+kind: PrometheusServiceLevel
+metadata:
+  name: cart-availability
+  namespace: monitoring
+spec:
+  service: cart
+  labels:
+    lab: thump-test
+    domain: otel-demo
+  slos:
+    - name: availability
+      objective: 99
+      description: >-
+        99% of cart requests succeed. Backed by app_frontend_requests_total
+        scoped to target="/api/cart" — the frontend route whose backing cart
+        RPCs (GetCart/AddItem) the cartFailure flag makes error. Verified live
+        (Wave 4): cart health goes Unhealthy under the flag; at baseline this
+        cluster emits NO status="500" series for /api/cart at all (error rate a
+        clean 0). Events-ratio SLI, same shape as product-catalog-availability
+        and ceph-rgw-availability. This is also the ranker's two-eligible-action
+        case: cartFailure is remediable by either restart-pod OR disable-flag,
+        but only the flag flip actually clears it (the fault is flag state, not
+        pod state), so thump must prefer the reversible flag action.
+        Chaos: chaos/flag-cart-on.sh / -off.sh (cartFailure).
+      sli:
+        events:
+          errorQuery: sum(rate(app_frontend_requests_total{target="/api/cart",status="500"}[{{.window}}]))
+          totalQuery: sum(rate(app_frontend_requests_total{target="/api/cart"}[{{.window}}]))
+      alerting:
+        name: CartAvailabilitySLO
+        labels:
+          severity: critical
+        pageAlert:
+          labels:
+            severity: critical
+        ticketAlert:
+          labels:
+            severity: warning

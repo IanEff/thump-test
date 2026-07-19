@@ -23,13 +23,27 @@ Env overrides: `KUBE_CONTEXT` (default `thump-test`), `FLAGD_NAMESPACE`
 |---|---|---|---|---|
 | `flag-product-catalog` | `productCatalogFailure` | availability | product-catalog | frontend returns HTTP 500 for product `OLJCESPC7Z` (200 for others) |
 | `flag-cart` | `cartFailure` | availability | cart | cart health check → `Unhealthy` (`connection failed`), cart RPCs fail |
-| `flag-recommendation-cache` | `recommendationCacheFailure` | latency / saturation | recommendation | unbounded cache growth → rising recommendation latency/memory (gradual) |
 
-Three flags, one per class. The **ranker's "second plausible remediation"**
+Two flags, both availability. The **ranker's "second plausible remediation"**
 case (§10) is covered by `cartFailure` alone: from outside, *restart the cart
 pod* looks as reasonable as *disable the flag*, but only disabling the flag
 actually clears it (a pod restart won't) — a real wrong-vs-right choice for
 thump to rank.
+
+**Dropped: the latency/saturation flag (was `recommendationCacheFailure`).**
+Wave 5 recon (2026-07-19) found the trimmed demo has **no clean, reversible
+latency signal** to hang an SLO on, so no latency-class flag is armed:
+- `recommendationCacheFailure` — recommendation (Python) emits no request-latency
+  histogram and there are no spanmetrics; its only movable signal is process
+  memory, which the trimmed loadgen (~0 rec/s) never grows and which wouldn't
+  reset on flag-off anyway (breaks reversibility).
+- `adHighCpu` / `adManualGc` — ad's `rpc_server_duration` is far too sparse
+  (~0.02 req/s, minute-long gaps) to read a baseline or burn.
+- `imageSlowLoad` — its 5–10 s injection lands in the frontend-proxy (Envoy)
+  layer, not `http_server_duration{service_name="frontend"}`, so it never shows
+  in a labeled per-service series.
+
+See memory `demo-slo-latency-signal-gap` for the full live evidence.
 
 **Dropped: `failedReadinessProbe`.** It was going to be the cart "second
 surface", but it's a **no-op in this deployment** — the cart Deployment has no
@@ -79,9 +93,9 @@ script returns.
 
 1. **Remaining live-verify.** `product-catalog` pair verified end-to-end (500 on
    the target product `OLJCESPC7Z`, 200 on a control, recovery on off — all via
-   hot-reload, no restarts). Still to run the same way: the
-   `recommendation-cache` and `cart` / `cart-readiness` pairs — confirm each
-   degrades via its own symptom and recovers.
+   hot-reload, no restarts). Still to run the same way: the `cart` pair — confirm
+   it degrades via its own symptom (cart-route 500s / health Unhealthy) and
+   recovers, and that `cart-availability` burns then clears.
 2. **thump actuator (thump repo, CLAUDE.md §8)** can use the exact same bare
    ConfigMap patch now that pieces 1+2 above are in place — no restart, no
    special-casing. `internal/actuate`'s dynamic-client merge-patch path applies.
