@@ -1,6 +1,19 @@
 # Rook operator — installs Rook CRDs + operator Deployment.
 # prune: false  — never auto-delete the operator
 # selfHeal: true — re-apply if someone kubectl-edits it
+#
+# ignoreDifferences on spec/replicas: same fix s3-traffic-generator.yaml
+# already proved out live (2026-07-13) for the exact same failure shape —
+# selfHeal:false alone doesn't stop an automated sync from reverting a live
+# replica-count change (confirmed again here, thump-test, 2026-07-26: with
+# selfHeal left true, the app-of-apps parent (thump-test-root) re-applies
+# rook-operator's own Application spec on its own reconcile, so even a
+# direct kubectl patch to THIS Application's syncPolicy gets overwritten
+# within ~1s — there's no live-only workaround, only the git-declared fix).
+# thump's accelerate-recovery action scales this Deployment to 0 to pause
+# the operator's own ceph-config reconciliation for a recovery window; excluding
+# replicas from the diff entirely is what let s3-traffic-generator's scale
+# survive, independent of selfHeal, and is expected to do the same here.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -24,3 +37,10 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: rook-ceph-operator
+      namespace: rook-ceph
+      jsonPointers:
+        - /spec/replicas
