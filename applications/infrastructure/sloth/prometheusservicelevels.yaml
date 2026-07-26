@@ -389,3 +389,44 @@ spec:
         ticketAlert:
           labels:
             severity: warning
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# acme SLO — the third, synthetic domain (applications/apps/acme). Originated
+# as the docs/onboarding.md operator walkthrough fixture in ~/projects/go/thump;
+# graduated into a standing domain alongside Ceph and OTel demo. service+name
+# below concatenate to "acme-api-availability", matching thump's
+# config/thump-test/rattle/watch.yaml SLO id exactly, same rule as every SLO
+# above. Fault control: acme-fault-flag/target ConfigMap ("/" healthy, "/fail"
+# faulted) in the acme namespace.
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: sloth.slok.dev/v1
+kind: PrometheusServiceLevel
+metadata:
+  name: acme-api-availability
+  namespace: monitoring
+spec:
+  service: acme-api
+  labels:
+    lab: thump-test
+    domain: acme
+  slos:
+    - name: availability
+      objective: 99
+      description: >-
+        99% of acme-api requests succeed. Synthetic domain for the
+        docs/onboarding.md operator walkthrough, kept on as a standing
+        orthogonal signal alongside Ceph and OTel demo.
+      sli:
+        events:
+          errorQuery: sum(rate(acme_api_requests_total{status="500"}[{{.window}}]))
+          totalQuery: sum(rate(acme_api_requests_total[{{.window}}]))
+      alerting:
+        name: AcmeAPIAvailabilitySLO
+        labels:
+          severity: critical
+        pageAlert:
+          labels:
+            severity: critical
+        ticketAlert:
+          labels:
+            severity: warning

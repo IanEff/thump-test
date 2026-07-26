@@ -1,0 +1,6 @@
+{
+  "appName": "acme",
+  "syncWave": "50",
+  "namespace": "acme",
+  "localPath": "applications/apps/acme"
+}
