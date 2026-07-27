@@ -1,0 +1,56 @@
+# Phase R (R5) — a private PKI for ns/thump, not a public CA. Nothing outside
+# this cluster ever validates these certs, so there's no ACME/DNS-01 plumbing
+# to negotiate for names like nats.thump.svc that don't resolve on the
+# internet — see phase-r-plan.md "R5 · An issuer on the rig".
+#
+# Trust distribution: mount the CA Secret directly rather than running
+# trust-manager to sync a Bundle ConfigMap into every namespace. The whole
+# trust domain is one namespace (ns/thump); trust-manager solves a
+# cross-namespace problem this rig doesn't have. Reopen this the day a second
+# namespace needs the bundle.
+#
+# Step 1: a self-signed bootstrap Issuer, used exactly once to mint the root.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: thump-ca-bootstrap
+  namespace: cert-manager
+spec:
+  selfSigned: {}
+---
+# Step 2: the CA certificate itself, signed by the bootstrap Issuer above.
+# ECDSA P-256 per secure-your-services.md:78 — current internal-PKI guidance
+# defaults to P-256 over the chapter's RSA-2048, and it's a smaller/faster
+# handshake for a cert both ends verify on every connection.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: thump-ca
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: thump-test-ca
+  secretName: thump-ca-secret
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  duration: 8760h # 1y — this rig is destroyed/recreated far more often than that
+  renewBefore: 720h # 30d
+  issuerRef:
+    name: thump-ca-bootstrap
+    kind: Issuer
+    group: cert-manager.io
+---
+# Step 3: the ClusterIssuer every beat's leaf Certificate (authored later, in
+# thump's own chart — deploy/chart/thump/templates/, not this repo) requests
+# against. A ClusterIssuer of kind `ca` looks for its Secret in cert-manager's
+# --cluster-resource-namespace, which defaults to the namespace cert-manager
+# itself is installed into — this namespace — so thump-ca-secret above is
+# already in the right place with no extra wiring.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: thump-ca
+spec:
+  ca:
+    secretName: thump-ca-secret

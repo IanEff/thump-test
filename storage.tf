@@ -41,6 +41,12 @@ resource "google_storage_bucket" "thump_wal" {
   storage_class               = "STANDARD"
   uniform_bucket_level_access = true
 
+  # Google-managed keys, not CMEK: a KMS keyring/IAM binding/rotation policy
+  # is real overhead on a bucket whose lifecycle_rule below deletes everything
+  # after 7 days anyway, against a threat model where the attacker who can
+  # read the bucket can already read the HMAC key from the same project.
+  public_access_prevention = "enforced"
+
   # Disposable by design, same as the rest of this rig (justfile's destroy
   # recipe) — a non-empty bucket would otherwise block `tofu destroy`.
   force_destroy = true

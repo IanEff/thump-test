@@ -16,6 +16,22 @@ kubeProxyReplacement: true
 # veth/socket layer, before encapsulation.
 routingMode: tunnel
 
+# Transparent node-to-node encryption — the floor, not the ceiling (Phase R,
+# "the fork, re-decided"). Every leg thump owns (beat<->NATS, /metrics) gets
+# real mTLS built by thump itself; this covers the legs thump does not own and
+# never delegates to: Prometheus scraping every workload on the rig, Rook's
+# own replication traffic, ArgoCD, and the Prometheus/Loki query legs that
+# stay plaintext because those backends are vendored charts that don't serve
+# TLS. nodeEncryption stays false: same-node pod-to-pod traffic rides the veth
+# pair in the clear either way (accepted, not chased — see I-16), and the
+# hostNetwork Gateway's own hop to a backend pod on another node
+# (gatewayAPI.hostNetwork below) is host traffic, not a pod-endpoint identity,
+# so it likely isn't covered by this either.
+encryption:
+  enabled: true
+  type: wireguard
+  nodeEncryption: false
+
 bpf:
   masquerade: true
 

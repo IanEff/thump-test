@@ -64,6 +64,10 @@ disable:
 cluster-cidr: "10.244.0.0/16"
 service-cidr: "10.96.0.0/12"
 cluster-domain: "cluster.local"
+# k3s stores Secret values in its datastore as base64 by default — this rig's
+# ANTHROPIC_API_KEY, S3 HMAC pair, and Slack webhook among them. Cluster-create
+# only: turning this on later means rebuilding, not restarting.
+secrets-encryption: true
 # k3s doesn't taint its server node the way kubeadm-based clusters do, so
 # regular workloads (Prometheus, Tempo, chaos-mesh, promtail, otel-collector,
 # kube-state-metrics, ArgoCD's own server/repo-server/redis, ...) are free to
