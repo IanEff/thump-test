@@ -78,7 +78,7 @@ variable "subnet_cidr" {
 variable "k3s_channel" {
   description = "k3s release channel."
   type        = string
-  default     = "v1.33"
+  default     = "v1.36"
 }
 
 variable "gitops_repo_url" {
