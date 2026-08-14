@@ -49,6 +49,7 @@ patches:
           controller.operation.processors: "25"
           controller.k8s.client.qps: "100"
           controller.k8s.client.burst: "150"
+          reposerver.parallelism.limit: "20"
 
   # Resource limits for the worker nodes (control plane is memory-constrained).
   # NOTE: argocd-application-controller ships upstream as a StatefulSet, not a

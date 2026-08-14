@@ -151,6 +151,10 @@ else
     echo "  If ${GITOPS_REPO_URL} is public, ArgoCD will clone it without auth."
 fi
 
+echo "[4b] Pre-bootstrap Prometheus Operator CRDs"
+kubectl kustomize /ceph-lab/applications/infrastructure/prometheus-operator-crds --enable-helm \
+    | kubectl apply --server-side --force-conflicts -f -
+
 echo "[5] Apply root Application (seeds entire GitOps tree)"
 kubectl apply -f /ceph-lab/cluster-bootstrap/bootstrap/root-app.yaml
 

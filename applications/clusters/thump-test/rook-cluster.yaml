@@ -39,9 +39,9 @@ spec:
     retry:
       limit: 10
       backoff:
-        duration: 10s
+        duration: 5s
         factor: 2
-        maxDuration: 3m
+        maxDuration: 1m
   ignoreDifferences:
     # The Rook operator updates these fields — don't flag as drift
     - group: ceph.rook.io
