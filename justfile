@@ -167,14 +167,10 @@ wipe-ceph-disks:
     PROJECT_ID={{project_id}} ZONE={{zone}} CLUSTER_NAME={{cluster_name}} \
         provisioning/scripts/wipe_ceph_disks.sh
 
-# Emergency teardown via gcloud CLI directly, bypassing OpenTofu — for when
-# `just destroy` can't run (broken .terraform/, unresponsive API, etc). No
-# ZONE/REGION here on purpose: this script exists for when Tofu state can't
-# be trusted, so it auto-discovers zone/region from live gcloud resources
-# itself (see its own comment) -- passing {{zone}}/{{region}} (Tofu-derived,
-# and evaluated once up front per the `zone :=` comment above) would defeat
-# that and reintroduce the same stale-zone failure mode this script was
-# written to survive.
-pull-ripcord:
-    PROJECT_ID={{project_id}} CLUSTER_NAME={{cluster_name}} \
-        provisioning/scripts/ripcord.sh
+# Emergency teardown via Google Cloud SDK parallel fan-out, bypassing
+# OpenTofu — for when `just destroy` can't run (broken .terraform/,
+# unresponsive API, etc). Dispatches parallel deletions across all
+# resource layers concurrently (VMs, disks, firewalls, static IPs, buckets,
+# HMAC keys -> Subnet -> VPC). Pass --dry-run to preview.
+pull-ripcord *args="":
+    go run ./provisioning/cmd/ripcord --project={{project_id}} --cluster={{cluster_name}} {{args}}
