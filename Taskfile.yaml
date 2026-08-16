@@ -156,7 +156,13 @@ tasks:
   build-image:
     desc: Build golden GCE machine image with pre-installed packages and cached container images
     cmds:
-      - bash provisioning/image/build_golden_image.sh
+      - uv run provisioning/image/build_golden_image.py {{.CLI_ARGS}}
+
+  # List all container images dynamically extracted from the repository manifests and charts.
+  list-images:
+    desc: List all container images dynamically extracted from the repository
+    cmds:
+      - uv run provisioning/image/build_golden_image.py --extract-only
 
   # Scale s3-traffic-generator to n replicas and start the loop on every pod.
   # Replicas configured via N (default 1): `task generate-traffic N=3`.
