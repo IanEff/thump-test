@@ -70,72 +70,100 @@ class ManifestScanner:
         self.versions = load_env_file(self.versions_file)
 
     def scan_repo(self) -> Dict[str, List[str]]:
-        """Scan applications, cluster-bootstrap, and versions to return categorized images."""
+        """Scan applications and cluster-bootstrap using kubectl kustomize for exact ground truth."""
         found_images: Set[str] = set()
 
         # 1. Add synthesized images from centralized versions
         self._add_pinned_bootstrap_images(found_images)
-        self._add_opentelemetry_demo_images(found_images)
 
-        # 2. Walk repo_root
-        ignored_dirs = {".git", ".terraform", ".pytest_cache", "__pycache__", "tests", "test"}
-        for root, dirs, files in os.walk(self.repo_root):
-            # Prune ignored directories in-place
-            dirs[:] = [d for d in dirs if d not in ignored_dirs and not d.startswith(".")]
+        # 2. Render all kustomization targets in applications/ and cluster-bootstrap/
+        kustomize_dirs: List[Path] = []
+        for search_root in [self.repo_root / "applications", self.repo_root / "cluster-bootstrap"]:
+            if not search_root.is_dir():
+                continue
+            for root, dirs, files in os.walk(search_root):
+                if "kustomization.yaml" in files or "kustomization.yml" in files:
+                    kustomize_dirs.append(Path(root))
 
-            for fname in files:
-                if fname.endswith((".yaml", ".yml")):
-                    fpath = Path(root) / fname
-                    self._scan_yaml_file(fpath, found_images)
+        for kdir in kustomize_dirs:
+            rendered = self._render_kustomization(kdir)
+            if rendered:
+                self._extract_images_from_text(rendered, found_images)
+            else:
+                # Fallback: scan raw YAML files in this directory
+                for yfile in kdir.glob("*.yaml"):
+                    self._scan_yaml_file(yfile, found_images)
 
-        # 3. Clean, filter, and categorize
+        # 3. If no kustomization targets were found, scan loose YAML files directly
+        if not kustomize_dirs:
+            for root, dirs, files in os.walk(self.repo_root):
+                for fname in files:
+                    if fname.endswith((".yaml", ".yml")):
+                        self._scan_yaml_file(Path(root) / fname, found_images)
+
+        # 4. Clean, normalize registries, and filter
         cleaned = self._clean_and_filter(found_images)
         return self._categorize(cleaned)
 
-    def _add_opentelemetry_demo_images(self, found: Set[str]) -> None:
-        """Inject OTel Astronomy Shop microservice images."""
-        otel_services = [
-            "adservice",
-            "cartservice",
-            "checkoutservice",
-            "currencyservice",
-            "emailservice",
-            "frontend",
-            "frontendproxy",
-            "imageprovider",
-            "loadgenerator",
-            "paymentservice",
-            "productcatalogservice",
-            "quoteservice",
-            "recommendationservice",
-            "shippingservice",
-        ]
-        for svc in otel_services:
-            found.add(f"ghcr.io/open-telemetry/demo:2.2.0-{svc}")
+    def _render_kustomization(self, kdir: Path) -> Optional[str]:
+        """Render kustomize target using kubectl kustomize --enable-helm."""
+        try:
+            res = subprocess.run(
+                ["kubectl", "kustomize", str(kdir), "--enable-helm"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                return res.stdout
+        except Exception:
+            pass
+        return None
+
+    def _extract_images_from_text(self, text: str, found: Set[str]) -> None:
+        """Extract image references from rendered Kubernetes YAML text."""
+        for line in text.splitlines():
+            line = line.strip()
+            # Match standard image: <val>
+            m = re.search(r"^\s*image:\s*[\"']?([^\s\"']+)[\"']?", line)
+            if m:
+                img = m.group(1).strip()
+                if "GITOPS_REPO_URL" not in img and "PLACEHOLDER" not in img and "${" not in img:
+                    found.add(img)
 
     def _clean_and_filter(self, raw_images: Set[str]) -> List[str]:
-        """Sanitize image names, remove template variables and test artifacts."""
+        """Sanitize image names, normalize registry prefixes, and remove test artifacts."""
         cleaned = set()
         for img in raw_images:
             img = img.strip().strip("\"'")
-            # Discard template interpolation & variables
+            if not img or ":" not in img:
+                continue
+            # Discard unrendered template variables and placeholders
             if any(c in img for c in ["{{", "}}", "$", "<", ">", " ", "\\"]):
                 continue
-            # Discard invalid/placeholder tags
-            if img.endswith(":null") or img.endswith(":None") or img.endswith(":") or ":" not in img:
+            if img.endswith(":null") or img.endswith(":None") or img.endswith(":"):
                 continue
-            # Discard test frameworks and unpinned helper tools from vendored charts
-            if any(bad in img for bad in ["bats/bats", "bitnami/os-shell", "istio/ztunnel", "keycloak-proxy"]):
+            # Discard test fixtures and helper tools from subcharts
+            if any(bad in img for bad in ["bats/bats", "loki-helm-test", "os-shell", "istio/ztunnel", "keycloak-proxy"]):
                 continue
-            # Discard multiple conflicting older versions of cilium/etcd
-            if "quay.io/cilium/cilium:v1.10" in img or "quay.io/cilium/cilium:v1.18" in img:
+            if img.startswith("bitnami/") or img.startswith("bitnamilegacy/") or img.startswith("alpine/k8s"):
                 continue
-            if "quay.io/cilium/clustermesh-apiserver:v1.18" in img:
-                continue
-            if "quay.io/cilium/hubble-relay:v1.18" in img:
-                continue
-            if "quay.io/cilium/operator:v1.18" in img:
-                continue
+
+            # Strip sha256 digests if present to ensure reliable containerd tag pulling
+            # e.g. quay.io/cilium/cilium:v1.19.3@sha256:... -> quay.io/cilium/cilium:v1.19.3
+            if "@sha256:" in img:
+                img = img.split("@sha256:")[0]
+
+            # Normalize registry prefixes for containerd
+            parts = img.split("/", 1)
+            if len(parts) == 1:
+                # Top-level Docker Hub official image (e.g. postgres:17.6)
+                img = f"docker.io/library/{img}"
+            else:
+                domain = parts[0]
+                if "." not in domain and ":" not in domain and domain != "localhost":
+                    # Docker Hub user/org image without domain prefix (e.g. grafana/tempo:2.6.1)
+                    img = f"docker.io/{img}"
 
             cleaned.add(img)
 
