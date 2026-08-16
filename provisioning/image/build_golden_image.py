@@ -429,12 +429,12 @@ class GCEBuilderSession:
         ]
         self._run_cmd(scp_cmd, "Failed to SCP provisioning files to builder VM")
 
-        # 2. Run common.sh and install pinned CLI tools
+        # 2. Run common.sh and install pinned CLI tools as root
         setup_script = """
 set -euo pipefail
 
 echo ">> Running real common.sh baseline..."
-sudo bash /tmp/provisioning/scripts/common.sh
+bash /tmp/provisioning/scripts/common.sh
 
 echo ">> Sourcing centralized versions..."
 set -a
@@ -445,30 +445,20 @@ ARCH=$(dpkg --print-architecture)
 
 echo ">> Installing Helm ${HELM_VERSION}..."
 curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-${ARCH}.tar.gz" | tar -xz -C /tmp
-sudo install -m 755 "/tmp/linux-${ARCH}/helm" /usr/local/bin/helm
+install -m 755 "/tmp/linux-${ARCH}/helm" /usr/local/bin/helm
 rm -rf "/tmp/linux-${ARCH}"
 
 echo ">> Installing ArgoCD CLI ${ARGOCD_CLI_VERSION}..."
-sudo curl -fsSL -o /usr/local/bin/argocd "https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_CLI_VERSION}/argocd-linux-${ARCH}"
-sudo chmod +x /usr/local/bin/argocd
+curl -fsSL -o /usr/local/bin/argocd "https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_CLI_VERSION}/argocd-linux-${ARCH}"
+chmod +x /usr/local/bin/argocd
 
 echo ">> Pre-fetching k3s install script..."
-sudo curl -fsSL -o /usr/local/bin/k3s-install.sh https://get.k3s.io
-sudo chmod +x /usr/local/bin/k3s-install.sh
+curl -fsSL -o /usr/local/bin/k3s-install.sh https://get.k3s.io
+chmod +x /usr/local/bin/k3s-install.sh
 
 echo ">> Base system setup complete."
 """
-        ssh_cmd = [
-            "gcloud",
-            "compute",
-            "ssh",
-            self.builder_name,
-            f"--zone={self.zone}",
-            f"--project={self.project_id}",
-            "--command=" + setup_script,
-            "--quiet",
-        ]
-        self._run_cmd(ssh_cmd, "Failed executing remote system provisioning")
+        self._run_ssh_script(setup_script, "Failed executing remote system provisioning")
 
     def _pre_cache_images(self, images: List[str]) -> None:
         """Start containerd and pre-pull all target images with retry backoff."""
@@ -496,15 +486,36 @@ echo ">> Base system setup complete."
         pull_script = """
 set -euo pipefail
 
-echo ">> Initializing ephemeral k3s containerd..."
+echo ">> Sourcing centralized versions..."
+set -a
+[ -f /tmp/provisioning/versions.env ] && source /tmp/provisioning/versions.env || true
+set +a
+
+echo ">> Initializing ephemeral k3s containerd (channel: ${K3S_CHANNEL:-v1.31})..."
+INSTALL_K3S_CHANNEL="${K3S_CHANNEL:-v1.31}" \
 INSTALL_K3S_SKIP_ENABLE=true \
 INSTALL_K3S_EXEC="server --disable-network-policy --disable-kube-proxy --disable traefik --disable servicelb" \
 /usr/local/bin/k3s-install.sh
 
-sudo systemctl start k3s
-until /usr/local/bin/k3s ctr images list &>/dev/null; do sleep 2; done
+systemctl start k3s
 
-echo ">> Pre-pulling images from manifest with exponential backoff..."
+echo ">> Waiting for containerd socket..."
+ready=0
+for attempt in $(seq 1 30); do
+    if /usr/local/bin/k3s ctr images list &>/dev/null; then
+        ready=1
+        echo "   -> containerd is ready."
+        break
+    fi
+    sleep 2
+done
+
+if [ "$ready" -ne 1 ]; then
+    echo "ERROR: containerd failed to become responsive."
+    exit 1
+fi
+
+echo ">> Pre-pulling images into containerd k8s.io namespace..."
 total=0
 success=0
 failed=0
@@ -517,13 +528,13 @@ while IFS= read -r img || [ -n "$img" ]; do
     
     pulled=0
     for attempt in 1 2 3; do
-        if sudo /usr/local/bin/k3s ctr images pull "$img" >/dev/null 2>&1; then
+        if /usr/local/bin/k3s ctr --namespace k8s.io images pull "$img" >/dev/null 2>&1; then
             pulled=1
             echo "   -> ok"
             break
         else
-            echo "   -> attempt $attempt failed, retrying in $((attempt * 3))s..."
-            sleep $((attempt * 3))
+            echo "   -> attempt $attempt failed, retrying in $((attempt * 2))s..."
+            sleep $((attempt * 2))
         fi
     done
 
@@ -538,27 +549,33 @@ done < /tmp/image_manifest.txt
 echo ">> Image caching summary: $success/$total succeeded, $failed failed."
 
 echo ">> Resetting k3s server database & generalizing system..."
-sudo systemctl stop k3s
-sudo /usr/local/bin/k3s-killall.sh || true
-sudo rm -rf /var/lib/rancher/k3s/server/db /var/lib/rancher/k3s/server/tls /etc/rancher/node /tmp/image_manifest.txt /tmp/provisioning
+systemctl stop k3s
+/usr/local/bin/k3s-killall.sh || true
+rm -rf /var/lib/rancher/k3s/server/db /var/lib/rancher/k3s/server/tls /etc/rancher/node /tmp/image_manifest.txt /tmp/provisioning
 
-sudo truncate -s 0 /etc/machine-id
-sudo rm -f /var/lib/dbus/machine-id
-sudo cloud-init clean || true
+truncate -s 0 /etc/machine-id
+rm -f /var/lib/dbus/machine-id
+cloud-init clean || true
 
 echo ">> Generalization complete."
 """
-        ssh_pull = [
+        self._run_ssh_script(pull_script, "Failed during image pre-caching")
+
+    def _run_ssh_script(self, script: str, err_msg: str) -> None:
+        """Execute a bash script on the builder VM with root privileges."""
+        cmd = [
             "gcloud",
             "compute",
             "ssh",
             self.builder_name,
             f"--zone={self.zone}",
             f"--project={self.project_id}",
-            "--command=" + pull_script,
+            "--command=sudo bash -s",
             "--quiet",
         ]
-        self._run_cmd(ssh_pull, "Failed during image pre-caching")
+        res = subprocess.run(cmd, input=script, text=True)
+        if res.returncode != 0:
+            raise RuntimeError(f"{err_msg} (exit code {res.returncode})")
 
     def _stop_builder_vm(self) -> None:
         cmd = [
