@@ -5,8 +5,8 @@ local_resource always has current values without a manual
 tofu-output/copy-paste round trip.
 
 This bucket (and its HMAC key) is ordinary Tofu state living in this same
-repo, same disposable posture as everything else here -- `just destroy` +
-`just apply` recreates it with a new random suffix and a new key every
+repo, same disposable posture as everything else here -- `task destroy` +
+`task apply` recreates it with a new random suffix and a new key every
 time. Re-run this after every fresh apply, not just the first one.
 
 Usage:

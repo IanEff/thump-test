@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """Time how long each ArgoCD Application takes to reach Healthy on a cold boot.
 
-`just up` gets GCE VMs running in ~180s, but the ArgoCD-driven GitOps tree
+`task up` gets GCE VMs running in ~180s, but the ArgoCD-driven GitOps tree
 (Rook-Ceph, Prometheus, Loki, ...) takes much longer to go fully Healthy, and
 until now that number was a stopwatch guess. This polls `kubectl get
 application -n argocd` on a fixed interval, logs every (sync, health)
 transition it observes with elapsed time since this script started, and
 writes the full timeline to a CSV for later comparison across boots.
 
-Usage: run in its own terminal, alongside `just tunnel`, ideally started
-right when `just up` is kicked off so the timeline covers the full
+Usage: run in its own terminal, alongside `task tunnel`, ideally started
+right when `task up` is kicked off so the timeline covers the full
 VM-boot -> API-reachable -> every-app-Healthy window, not just the
 ArgoCD-visible portion:
 
-    just tunnel &
-    just up &
-    just boot-timeline
+    task tunnel &
+    task up &
+    task boot-timeline
 
 No GitHub webhook is configured against this cluster's ArgoCD, so polling is
 the only external option; Application *status* (sync/health) still updates

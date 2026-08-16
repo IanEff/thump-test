@@ -1,0 +1,225 @@
+version: "3"
+
+# thump-test lifecycle wrapper. `task` or `task --list` lists tasks.
+#
+# Unlike rook-gke's Taskfile, there's no gke-gcloud-auth-plugin PATH dance
+# here — Tofu only touches GCP (no kubernetes/helm providers), and kubectl
+# auth is just a fetched kubeconfig, not an exec-plugin.
+
+vars:
+  CLUSTER_NAME: '{{.CLUSTER_NAME | default "thump-test"}}'
+  PROJECT_ID:
+    sh: gcloud config get-value project 2>/dev/null || echo ""
+  ZONE:
+    sh: v=$(tofu output -json zone 2>/dev/null) && v="${v#\"}" && echo "${v%\"}" || echo "us-central1-a"
+  REGION:
+    sh: v=$(tofu output -json region 2>/dev/null) && v="${v#\"}" && echo "${v%\"}" || echo "us-central1"
+
+tasks:
+  default:
+    desc: List available tasks
+    silent: true
+    cmds:
+      - task --list
+
+  fmt:
+    desc: Format OpenTofu configurations
+    cmds:
+      - tofu fmt -recursive
+
+  init:
+    desc: Initialize OpenTofu root module
+    cmds:
+      - tofu init
+
+  validate:
+    desc: Validate OpenTofu configurations
+    deps: [init]
+    cmds:
+      - tofu validate
+
+  plan:
+    desc: Generate OpenTofu execution plan
+    deps: [init]
+    cmds:
+      - tofu plan
+
+  # Creates real, billed GCP resources.
+  apply:
+    desc: Apply OpenTofu infrastructure changes (creates billed GCP resources)
+    deps: [init]
+    cmds:
+      - tofu apply -auto-approve
+
+  # One-shot bootstrap: apply, fetch kubeconfig, write /etc/hosts entries,
+  # sync thump's S3 credentials into its .env (thump-env below).
+  up:
+    desc: One-shot bootstrap (apply, fetch credentials, sync thump env)
+    cmds:
+      - task: apply
+      - task: credentials
+      - task: thump-env
+      - |
+        echo ""
+        echo "Cluster is up. The k3s API is IAP-tunnel-only — open one first:"
+        echo "  task tunnel &"
+        echo "then sanity check: kubectl --context={{.CLUSTER_NAME}} get nodes"
+        echo ""
+        echo "Watch ArgoCD sync: kubectl --context={{.CLUSTER_NAME}} get applications -n argocd -w"
+        echo "Or time the full boot: task boot-timeline (in its own terminal)"
+
+  # Push storage.tf's S3 outputs (bucket/endpoint/HMAC key) into thump's .env
+  # — its Tiltfile's thump-s3-secret local_resource reads from there. Re-run
+  # any time you `destroy`/`apply` this rig, not just once: the bucket and its
+  # key are ordinary Tofu state, recreated with a new name/secret each cycle.
+  # THUMP_ENV_PATH overrides the default sibling-repo path.
+  thump-env:
+    desc: Export GCS S3 bucket credentials into consumer .env files
+    cmds:
+      - python3 provisioning/scripts/sync_thump_env.py
+
+  # Tears down every Tofu-managed resource (instances, OSD disks, static IPs,
+  # firewall rules, subnet, VPC) — true zero cost from here, nothing left to
+  # orphan since OSD disks are ordinary Tofu resources, not CSI-provisioned PVCs.
+  destroy:
+    desc: Teardown all Tofu-managed GCP resources (true zero cost)
+    deps: [init]
+    cmds:
+      - tofu destroy -auto-approve
+      - task: hosts-remove
+      - python3 provisioning/scripts/fetch_kubeconfig.py remove
+
+  # Fetch kubeconfig (gcloud compute ssh transport, OS Login) and merge it in,
+  # then write the fixed *.thump-test.lab hostnames into /etc/hosts.
+  credentials:
+    desc: Fetch kubeconfig and update /etc/hosts entries
+    cmds:
+      - task: kubeconfig
+      - task: hosts
+
+  # Fetch kubeconfig (gcloud compute ssh transport, OS Login) and merge it in.
+  kubeconfig:
+    desc: Fetch kubeconfig via gcloud compute ssh and OS Login
+    cmds:
+      - PROJECT_ID={{.PROJECT_ID}} CLUSTER_NAME={{.CLUSTER_NAME}} python3 provisioning/scripts/fetch_kubeconfig.py add
+
+  hosts:
+    desc: Add *.thump-test.lab host entries to /etc/hosts
+    cmds:
+      - sudo python3 provisioning/scripts/manage_hosts.py add "$(tofu output -raw control_plane_external_ip)"
+
+  hosts-remove:
+    desc: Remove *.thump-test.lab host entries from /etc/hosts
+    cmds:
+      - sudo python3 provisioning/scripts/manage_hosts.py remove
+
+  # SSH to a node. TARGET is "control-plane" (default) or "node-<n>", e.g. `task ssh TARGET=node-2`.
+  # Port 22 is IAP-only (network.tf) — requires roles/iap.tunnelResourceAccessor.
+  ssh:
+    desc: SSH to a node via IAP tunnel (TARGET=control-plane or TARGET=node-<n>)
+    vars:
+      TARGET: '{{.TARGET | default "control-plane"}}'
+    cmds:
+      - gcloud compute ssh {{.CLUSTER_NAME}}-{{.TARGET}} --zone={{.ZONE}} --project={{.PROJECT_ID}} --tunnel-through-iap
+
+  # Open an IAP tunnel to the k3s API (port 6443 is IAP-only, see network.tf).
+  # Foreground/blocking on purpose — leave it running in its own terminal (or
+  # background it yourself with `task tunnel &`) for as long as you need
+  # kubectl access; fetch_kubeconfig.py points the kubeconfig server at
+  # 127.0.0.1:6443 to match.
+  tunnel:
+    desc: Open an IAP tunnel to k3s API on localhost:6443
+    cmds:
+      - gcloud compute start-iap-tunnel {{.CLUSTER_NAME}}-control-plane 6443 --local-host-port=localhost:6443 --zone={{.ZONE}} --project={{.PROJECT_ID}}
+
+  # Times how long each ArgoCD Application takes to reach Healthy on a cold
+  # boot, and writes a CSV timeline to boot-timelines/. Run in its own terminal
+  # alongside `task tunnel`, ideally started right when `task up` is kicked off
+  # so the timeline covers VM-boot -> API-reachable -> every-app-Healthy, not
+  # just the ArgoCD-visible portion. `cilium` is excluded from the completion
+  # condition on purpose -- see the script's own docstring / CLAUDE.md gotcha #15.
+  boot-timeline:
+    desc: Time ArgoCD applications reaching Healthy from cold boot
+    cmds:
+      - python3 provisioning/scripts/boot_timeline.py --context={{.CLUSTER_NAME}}
+
+  # Regenerate Prometheus rule groups from the Sloth SLO specs (requires sloth-cli, yq).
+  # Splices directly into applications/infrastructure/prometheus/values.yaml —
+  # commit + push the diff and let ArgoCD reconcile; no kubectl apply needed.
+  gen-slos:
+    desc: Regenerate Prometheus rule groups from Sloth SLO specs
+    cmds:
+      - provisioning/scripts/gen_slos.sh
+
+  # Build a golden GCE machine image with pre-installed packages and cached container images.
+  # Booting from this image drops cluster cold boot time from ~6 minutes to ~45 seconds.
+  build-image:
+    desc: Build golden GCE machine image with pre-installed packages and cached container images
+    cmds:
+      - bash provisioning/image/build_golden_image.sh
+
+  # Scale s3-traffic-generator to n replicas and start the loop on every pod.
+  # Replicas configured via N (default 1): `task generate-traffic N=3`.
+  generate-traffic:
+    desc: Scale s3-traffic-generator and start S3 load against Ceph RGW (N=1)
+    vars:
+      N: '{{.N | default 1}}'
+    cmds:
+      - |
+        kubectl --context={{.CLUSTER_NAME}} scale deployment/s3-traffic-generator -n default --replicas={{.N}}
+        kubectl --context={{.CLUSTER_NAME}} rollout status deployment/s3-traffic-generator -n default --timeout=120s
+        end=$(($(date +%s) + 120))
+        while true; do
+            ready=$(kubectl --context={{.CLUSTER_NAME}} get pods -n default -l app=s3-traffic-generator -o jsonpath='{range .items[*]}{.status.containerStatuses[0].ready}{"\n"}{end}' 2>/dev/null | grep -c '^true$' || true)
+            echo "waiting for ready pods: $ready/{{.N}}"
+            [ "$ready" -ge "{{.N}}" ] && break
+            if [ $(date +%s) -ge $end ]; then echo "timed out waiting for {{.N}} ready pods" >&2; exit 1; fi
+            sleep 3
+        done
+        for pod in $(kubectl --context={{.CLUSTER_NAME}} get pods -n default -l app=s3-traffic-generator -o jsonpath='{.items[*].metadata.name}'); do
+            echo "waiting for /start-traffic.sh on $pod"
+            kubectl --context={{.CLUSTER_NAME}} exec -n default "$pod" -- sh -c 'i=0; until [ -f /start-traffic.sh ]; do i=$((i+1)); if [ $i -ge 60 ]; then echo "$0: /start-traffic.sh never appeared" >&2; exit 1; fi; sleep 2; done'
+            echo "starting traffic on $pod"
+            kubectl --context={{.CLUSTER_NAME}} exec -n default "$pod" -- sh -c 'nohup /start-traffic.sh > /proc/1/fd/1 2> /proc/1/fd/2 &'
+        done
+        sleep 8
+        echo "--- proof of life (last 3 lines per pod) ---"
+        kubectl --context={{.CLUSTER_NAME}} logs -n default -l app=s3-traffic-generator --tail=3 --prefix
+
+  # DESTRUCTIVE: wipes all Rook Ceph resources + zeroes OSD disks, without
+  # rebuilding VMs. Use to reinstall Rook without a full tofu destroy/apply cycle.
+  wipe-ceph-disks:
+    desc: "DESTRUCTIVE: Wipe Rook Ceph resources and zero OSD disks without destroying VMs"
+    cmds:
+      - PROJECT_ID={{.PROJECT_ID}} ZONE={{.ZONE}} CLUSTER_NAME={{.CLUSTER_NAME}} provisioning/scripts/wipe_ceph_disks.sh
+
+  # Emergency teardown via Google Cloud SDK parallel fan-out, bypassing
+  # OpenTofu — for when `tofu destroy` / `task destroy` can't run (broken .terraform/,
+  # unresponsive API, etc). Dispatches parallel deletions across all
+  # resource layers concurrently (VMs, disks, firewalls, static IPs, buckets,
+  # HMAC keys -> Subnet -> VPC). Pass --dry-run to preview (e.g. `task pull-ripcord -- --dry-run`).
+  pull-ripcord:
+    desc: Emergency teardown via parallel Go DAG engine bypassing OpenTofu (pass CLI args with --)
+    cmds:
+      - go run ./provisioning/cmd/ripcord --project={{.PROJECT_ID}} --cluster={{.CLUSTER_NAME}} {{.CLI_ARGS}}
+
+  # Chaos injection/clearing tasks for OTel demo flagd flags
+  chaos:product-catalog-on:
+    desc: "Chaos: inject productCatalogFailure via flagd (frontend 500s on target product)"
+    cmds:
+      - bash chaos/flag-product-catalog-on.sh
+
+  chaos:product-catalog-off:
+    desc: "Chaos: clear productCatalogFailure via flagd"
+    cmds:
+      - bash chaos/flag-product-catalog-off.sh
+
+  chaos:cart-on:
+    desc: "Chaos: inject cartFailure via flagd (cart health Unhealthy, cart RPCs fail)"
+    cmds:
+      - bash chaos/flag-cart-on.sh
+
+  chaos:cart-off:
+    desc: "Chaos: clear cartFailure via flagd"
+    cmds:
+      - bash chaos/flag-cart-off.sh

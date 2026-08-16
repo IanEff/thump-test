@@ -12,7 +12,7 @@
 #
 # Usage:
 #   bash provisioning/image/build_golden_image.sh
-#   or: just build-image
+#   or: task build-image
 
 set -euo pipefail
 

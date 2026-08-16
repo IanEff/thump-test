@@ -10,7 +10,7 @@
 #   - tls-san includes the internal static IP (other cluster nodes reach this
 #     node via it), the external static IP (harmless to keep even though
 #     port 6443 is now IAP-only — see network.tf), and 127.0.0.1, since
-#     kubectl reaches this node through `just tunnel`'s local IAP tunnel and
+#     kubectl reaches this node through `task tunnel`'s local IAP tunnel and
 #     fetch_kubeconfig.py rewrites the server URL to 127.0.0.1 to match.
 set -euo pipefail
 
