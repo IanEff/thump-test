@@ -519,8 +519,8 @@ set -a
 [ -f /tmp/provisioning/versions.env ] && source /tmp/provisioning/versions.env || true
 set +a
 
-echo ">> Initializing ephemeral k3s containerd (channel: ${K3S_CHANNEL:-v1.31})..."
-INSTALL_K3S_CHANNEL="${K3S_CHANNEL:-v1.31}" \
+echo ">> Initializing ephemeral k3s containerd (channel: ${K3S_CHANNEL:-v1.36})..."
+INSTALL_K3S_CHANNEL="${K3S_CHANNEL:-v1.36}" \
 INSTALL_K3S_SKIP_ENABLE=true \
 INSTALL_K3S_EXEC="server --disable-network-policy --disable-kube-proxy --disable traefik --disable servicelb" \
 /usr/local/bin/k3s-install.sh
@@ -670,12 +670,30 @@ def get_default_gcp_project() -> str:
     return "terraform-sandbox-430820"
 
 
+def get_default_gcp_zone() -> str:
+    """Derive GCP zone from terraform.tfvars or fallback."""
+    tfvars_path = Path(__file__).resolve().parent.parent.parent / "terraform.tfvars"
+    if tfvars_path.is_file():
+        try:
+            with open(tfvars_path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("zone") and "=" in line:
+                        _, val = line.split("=", 1)
+                        zone = val.strip().strip('"\'')
+                        if zone:
+                            return zone
+        except Exception:
+            pass
+    return "us-east1-b"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="thump-test dynamic golden machine image builder")
     parser.add_argument("--extract-only", "-l", action="store_true", help="Print discovered container image inventory and exit")
     parser.add_argument("--dry-run", "-n", action="store_true", help="Walk through build pipeline without touching GCP")
     parser.add_argument("--project", default=os.getenv("PROJECT_ID", get_default_gcp_project()), help="GCP project ID")
-    parser.add_argument("--zone", default=os.getenv("ZONE", "us-central1-a"), help="GCP zone for builder VM")
+    parser.add_argument("--zone", default=os.getenv("ZONE", get_default_gcp_zone()), help="GCP zone for builder VM")
     parser.add_argument("--family", default=os.getenv("IMAGE_FAMILY", "thump-test-golden"), help="Target GCE image family")
     parser.add_argument("--name", default=os.getenv("IMAGE_NAME"), help="Explicit GCE image name")
     parser.add_argument("--keep-builder", action="store_true", help="Do not delete builder VM on exit/failure")
