@@ -33,7 +33,7 @@ __pycache__/
 *.pyc
 *.pyo
 
-# just boot-timeline output -- operator-local timing data, not repo content
+# task boot-timeline output -- operator-local timing data, not repo content
 boot-timelines/
 
 # Editors

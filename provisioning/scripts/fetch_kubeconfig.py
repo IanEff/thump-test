@@ -7,7 +7,7 @@ is IAP-only, see network.tf) instead of `limactl shell`, and the fetched
 kubeconfig's server URL is rewritten from the control-plane's INTERNAL
 static IP (what control-plane.sh's own kubeconfig already uses internally)
 to 127.0.0.1, since the k3s API (port 6443) is also IAP-only now — reaching
-it requires `just tunnel` running locally (gcloud compute start-iap-tunnel
+it requires `task tunnel` running locally (gcloud compute start-iap-tunnel
 ... 6443 --local-host-port=localhost:6443). No TLS-verify skip is needed for
 this rewrite — k3s's tls-san list (control-plane.sh) includes 127.0.0.1
 specifically so the existing CA validates through the tunnel.
@@ -34,7 +34,7 @@ NEW_CLUSTER_NAME = "thump-test-cluster"
 
 # control-plane.sh runs k3s + Cilium install after boot; SSH (and even OS
 # Login key propagation) can be reachable well before /root/.kube/config
-# exists. `just up` chains `apply` straight into `credentials` with no wait
+# exists. `task up` chains `apply` straight into `credentials` with no wait
 # of its own, so this script retries instead of failing on the first race.
 KUBECONFIG_WAIT_TIMEOUT_S = 600
 KUBECONFIG_WAIT_INTERVAL_S = 10
@@ -101,7 +101,7 @@ def add() -> None:
     try:
         content = result.stdout
         # Rewrite server URL: internal IP (what control-plane.sh set) ->
-        # 127.0.0.1 (what `just tunnel`'s IAP tunnel exposes locally).
+        # 127.0.0.1 (what `task tunnel`'s IAP tunnel exposes locally).
         # tls-san includes 127.0.0.1, so no insecure-skip-tls-verify is needed.
         content = content.replace(internal_ip, "127.0.0.1")
         content = content.replace("current-context: default", f"current-context: {NEW_CONTEXT_NAME}")
@@ -127,7 +127,7 @@ def add() -> None:
         shutil.move(str(merged_conf), KUBE_CONFIG_PATH)
         KUBE_CONFIG_PATH.chmod(0o600)
         print(f"Kubeconfig updated. Context '{NEW_CONTEXT_NAME}' is now current.")
-        print("  Server: https://127.0.0.1:6443 (requires `just tunnel` running)")
+        print("  Server: https://127.0.0.1:6443 (requires `task tunnel` running)")
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 

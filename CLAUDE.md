@@ -10,7 +10,7 @@ cluster, two orthogonal applications. Not a lean OTel-only sibling, and *not* mu
 with rook-gce-k3s: **rook-gce-k3s is retired**, thump-test replaces it as *the* rig. Re-add
 everything the `2f2584a` prune removed (see §6) before doing app-domain work. **Not yet real**:
 no GitHub repo exists for this code yet (still local-only), no deploy key generated, no
-`terraform.tfvars`, no justfile wired, no OTel demo Application, no collector metrics pipeline, no
+`terraform.tfvars`, no Taskfile wired, no OTel demo Application, no collector metrics pipeline, no
 `tofu apply` has run, no demo SLOs. Run `TaskList` for the live, granular to-do sequence (task IDs
 and blockers) — it's more current than this section will stay; update this paragraph only if it
 drifts meaningfully out of sync, don't treat it as the source of truth over TaskList.
@@ -48,7 +48,7 @@ stability). `thump-test` is a **faithful copy** of it — same GCP project
 (`terraform-sandbox-430820`), same OpenTofu stack, **Ceph kept** — that adds the OTel demo. It
 **replaces** rook-gce-k3s rather than sitting beside it: the ~12-vCPU `CPUS_ALL_REGIONS` quota
 only fits one GCE cluster at a time, and there's no reason to keep the Ceph-only rig once
-thump-test carries Ceph *and* the demo. Retire rook-gce-k3s (`just destroy` it) once this copy is
+thump-test carries Ceph *and* the demo. Retire rook-gce-k3s (`task destroy` it) once this copy is
 proven; don't run both.
 
 ## 2. Source-of-truth repos
@@ -65,7 +65,7 @@ proven; don't run both.
 
 ## 3. Key commands
 
-Ported from `rook-gce-k3s`'s `justfile` (verify each still applies once the Tofu files are
+Ported from `rook-gce-k3s`'s `Taskfile.yaml` (verify each still applies once the Tofu files are
 actually copied over):
 
 | verb | does |
@@ -221,7 +221,7 @@ This repo's job is cluster + obs + app + SLOs + chaos scripts only.
 ## 9. Build sequence (waves, owner-tagged)
 
 0. **[rig]** Faithful copy of `rook-gce-k3s` → `thump-test` (Ceph kept, fork renamed); make the
-   capacity call (Ceph shrink + demo trim); `just up`; ArgoCD healthy, Ceph `HEALTH_OK`.
+   capacity call (Ceph shrink + demo trim); `task up`; ArgoCD healthy, Ceph `HEALTH_OK`.
 1. **[rig]** Obs stack green (prometheus/sloth/otel-collector/tempo/loki/grafana).
 2. **[rig]** Collector **metrics pipeline** added — demo metrics reach Prometheus, not just Tempo.
 3. **[rig]** OTel demo deployed (trimmed to fit), load gen running.
@@ -258,5 +258,5 @@ This repo's job is cluster + obs + app + SLOs + chaos scripts only.
   to be broken and rebuilt in service of testing `thump`. Don't second-guess or add confirmation
   gates back in; `.claude/settings.json` reflects this deliberately.
 - `thump-test` **replaces** `rook-gce-k3s` — they share one 12-vCPU GCP quota and can't both be
-  up. Until rook-gce-k3s is formally retired, confirm it's `just destroy`'d before `just up` here.
+  up. Until rook-gce-k3s is formally retired, confirm it's `task destroy`'d before `task up` here.
   Once thump-test is proven (Ceph + demo both live), retire rook-gce-k3s for good.

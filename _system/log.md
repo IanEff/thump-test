@@ -28,3 +28,10 @@
   - Pre-bakes baseline apt packages, kernel module configurations, k3s/helm/argocd binaries.
   - Pre-populates containerd image cache with Rook Ceph, Cilium, Prometheus, Tempo, Loki, Flagd, and OTel demo images.
   - Added `var.boot_image` in `variables.tf` and `compute.tf` to seamlessly switch between vanilla Ubuntu and pre-baked images.
+
+## 2026-08-16 - Migration from Justfile to Go-Task (Taskfile.yaml)
+- Replaced `justfile` with Go-Task (`Taskfile.yaml`) to unify developer workflows with `thump` (`~/projects/go/thump`).
+- Ported all OpenTofu lifecycle, connectivity, debugging, SLO, image building, and traffic generation recipes to structured tasks.
+- Replaced eager parse-time shell interpolation with lazy dynamic evaluation and structured fallbacks.
+- Added flagd chaos injection/clear tasks (`chaos:product-catalog-on`, `chaos:product-catalog-off`, `chaos:cart-on`, `chaos:cart-off`).
+- Updated all documentation (`README.md`, `CLAUDE.md`), script docstrings, and comments across the workspace.

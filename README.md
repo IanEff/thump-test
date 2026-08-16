@@ -30,7 +30,7 @@ Running Ceph and the OTel Astronomy Shop on the same cluster proves that `thump`
 | **Networking & Ingress** | **Cilium & Gateway API** | eBPF-based CNI with VXLAN tunneling (`routingMode: tunnel`), `gatewayAPI.hostNetwork` with `NET_BIND_SERVICE` for host-bound Envoy ingress (ports 80/443). |
 | **Network Visibility** | **Cilium Hubble** | Deep eBPF packet inspection and L7 flow visibility UI and API. |
 | **Observability Stack** | **Prometheus + Grafana + Tempo + Loki** | Complete telemetry pipeline: Prometheus for metrics, Grafana for visualization, Tempo for OTLP distributed traces, and Loki + Promtail for log aggregation. |
-| **SLO Alerting Engine** | **Sloth** | Declarative `PrometheusServiceLevel` specs compiled (`just gen-slos`) directly into Prometheus alerting rules for multi-window burn-rate detection. |
+| **SLO Alerting Engine** | **Sloth** | Declarative `PrometheusServiceLevel` specs compiled (`task gen-slos`) directly into Prometheus alerting rules for multi-window burn-rate detection. |
 | **In-Cluster PKI** | **cert-manager** | Jetstack cert-manager v1.21.0 creating a private cluster CA (`Issuer` → `CA Certificate` → `ClusterIssuer` in namespace `cert-manager`) for internal TLS. |
 | **Wire & Data Security** | **WireGuard & Encryption** | Cilium WireGuard mesh encryption for pod-to-pod transit, Ceph `msgr2_secure_mode` wire encryption, and k3s cluster `secrets-encryption` at rest. |
 | **Chaos Engineering** | **Chaos Mesh & flagd** | Chaos Mesh for Ceph pod/network/IO chaos; custom `flagd` shell scripts for instant, reversible microservice failure injection. |
@@ -40,7 +40,7 @@ Running Ceph and the OTel Astronomy Shop on the same cluster proves that `thump`
 ## Prerequisites
 
 - **GCP Project**: Billing enabled, and `gcloud` authenticated (`gcloud auth login`) with `roles/compute.osLoginUser` and `roles/iap.tunnelResourceAccessor` at minimum.
-- **CLI Tools**: `tofu` (or `terraform`), `just`, `kubectl`, `python3`, `gcloud`, `yq` (optional, for `gen-slos`).
+- **CLI Tools**: `tofu` (or `terraform`), `task` (Go-Task), `kubectl`, `python3`, `gcloud`, `yq` (optional, for `gen-slos`).
 - **GitHub Repository**: A git remote to hold your GitOps tree (ArgoCD reconciles directly from git).
 - **SSH Deploy Key**: A deploy key with **write** permissions placed at `./deploy_thump-test` (gitignored), used by the bootstrap script to push initial cluster config back to git.
 
@@ -58,10 +58,10 @@ EOF
 # Note: Ensure the private deploy key with write access lives at ./deploy_thump-test
 
 # 2. Provision GCE infrastructure & bootstrap k3s + ArgoCD (~2-4 min)
-just up
+task up
 
 # 3. Open an IAP tunnel to the k3s API (run in a separate terminal session)
-just tunnel &
+task tunnel &
 
 # 4. Watch ArgoCD synchronize all applications
 kubectl --context thump-test get applications -n argocd -w
@@ -70,14 +70,14 @@ kubectl --context thump-test get applications -n argocd -w
 kubectl --context thump-test exec -it -n rook-ceph deploy/rook-ceph-tools -- ceph status
 
 # 6. Tear down infrastructure completely (zero cost when destroyed)
-just destroy
+task destroy
 ```
 
 ---
 
 ## Service Directory
 
-Once `just up` completes, `manage_hosts.py` automatically injects the control-plane IP into `/etc/hosts`. The following services are accessible locally via HTTPS:
+Once `task up` completes, `manage_hosts.py` automatically injects the control-plane IP into `/etc/hosts`. The following services are accessible locally via HTTPS:
 
 | Service | Local URL | Description |
 |---|---|---|
@@ -88,7 +88,7 @@ Once `just up` completes, `manage_hosts.py` automatically injects the control-pl
 | **Prometheus** | `https://prometheus.thump-test.lab` | PromQL metrics database and Sloth burn-rate alerts |
 | **OTel Demo** | `https://otel-demo.thump-test.lab` | Astronomy Shop e-commerce frontend & checkout flow |
 
-*Default login credentials for services are retrieved or generated during `just credentials`.*
+*Default login credentials for services are retrieved or generated during `task credentials`.*
 
 ---
 
@@ -173,36 +173,36 @@ SLOs are authored as Sloth YAML definitions in `applications/infrastructure/slot
 - **Ceph Domain SLOs**: `ceph-rgw-availability`, `ceph-rgw-saturation`, `ceph-osd-latency`, `ceph-health`, `ceph-redundancy`.
 - **OTel Demo Domain SLOs**: `cart-availability` (tracking `checkout` → `CartService` gRPC error ratio), `product-catalog-availability`.
 
-Run `just gen-slos` to re-compile Sloth specs into Prometheus rules and automatically update `applications/infrastructure/prometheus/values.yaml`.
+Run `task gen-slos` to re-compile Sloth specs into Prometheus rules and automatically update `applications/infrastructure/prometheus/values.yaml`.
 
 ---
 
 ## Developer Automation ("Toys, Bells & Whistles")
 
-`thump-test` includes a rich set of developer commands and lifecycle utilities powered by `just`:
+`thump-test` includes a rich set of developer commands and lifecycle utilities powered by `task` (`Taskfile.yaml`):
 
-### Key `just` Commands
+### Key `task` Commands
 
 | Command | Category | Description |
 |---|---|---|
-| `just up` | Lifecycle | Complete one-shot cluster bring-up: `tofu apply`, fetch kubeconfig, write `/etc/hosts`, and sync GCS credentials. |
-| `just destroy` | Lifecycle | Complete zero-cost infrastructure teardown. Removes all VMs, disks, subnets, and state. |
-| `just tunnel` | Connectivity | Opens an IAP-gated SSH tunnel to `localhost:6443` for `kubectl` access without exposing public ports. |
-| `just credentials` | Connectivity | Fetches cluster kubeconfig via OS Login and updates local `/etc/hosts` with `*.thump-test.lab` records. |
-| `just ssh [target]` | Debugging | Connects to nodes via IAP tunnel (`target="control-plane"` or `"node-1"`, `"node-2"`, `"node-3"`). |
-| `just generate-traffic <n>`| Workload | Scales `s3-traffic-generator` to `<n>` pods, polls readiness, and launches backgrounded S3 traffic loops targeting RGW. |
-| `just wipe-ceph-disks` | Operations | **Destructive**: Wipes Rook Ceph CRDs and zeroes out raw OSD block devices without destroying GCE VMs. |
-| `just gen-slos` | Observability | Compiles Sloth SLO specs into Prometheus alerting rules and splices them into Prometheus Helm values. |
-| `just boot-timeline` | Profiling | Launches `boot_timeline.py` to time every ArgoCD application reaching `Healthy` state from cold boot. |
-| `just thump-env` | Integration | Runs `sync_thump_env.py` to export GCS S3 bucket credentials into consumer `.env` files. |
-| `just pull-ripcord` | Emergency | **Nuclear**: Out-of-band GCP resource eraser (`ripcord.sh`) bypassing Tofu state if state is corrupted or unresponsive. |
+| `task up` | Lifecycle | Complete one-shot cluster bring-up: `tofu apply`, fetch kubeconfig, write `/etc/hosts`, and sync GCS credentials. |
+| `task destroy` | Lifecycle | Complete zero-cost infrastructure teardown. Removes all VMs, disks, subnets, and state. |
+| `task tunnel` | Connectivity | Opens an IAP-gated SSH tunnel to `localhost:6443` for `kubectl` access without exposing public ports. |
+| `task credentials` | Connectivity | Fetches cluster kubeconfig via OS Login and updates local `/etc/hosts` with `*.thump-test.lab` records. |
+| `task ssh [TARGET=...]` | Debugging | Connects to nodes via IAP tunnel (`TARGET="control-plane"` (default) or `"node-1"`, `"node-2"`, `"node-3"`). |
+| `task generate-traffic [N=...]`| Workload | Scales `s3-traffic-generator` to `N` pods (default 1), polls readiness, and launches backgrounded S3 traffic loops targeting RGW. |
+| `task wipe-ceph-disks` | Operations | **Destructive**: Wipes Rook Ceph CRDs and zeroes out raw OSD block devices without destroying GCE VMs. |
+| `task gen-slos` | Observability | Compiles Sloth SLO specs into Prometheus alerting rules and splices them into Prometheus Helm values. |
+| `task boot-timeline` | Profiling | Launches `boot_timeline.py` to time every ArgoCD application reaching `Healthy` state from cold boot. |
+| `task thump-env` | Integration | Runs `sync_thump_env.py` to export GCS S3 bucket credentials into consumer `.env` files. |
+| `task pull-ripcord [-- args]` | Emergency | **Nuclear**: Out-of-band GCP resource eraser (`ripcord`) bypassing Tofu state if state is corrupted or unresponsive. |
 
 ### Diagnostic & Integration Utilities
 
-- **`boot_timeline.py` (`just boot-timeline`)**: A Python profiling tool that monitors ArgoCD application sync states during cluster bootstrap, generating detailed time-stamped CSV reports in `boot-timelines/`.
-- **`s3-traffic-generator` (`just generate-traffic <n>`)**: Idempotent Python/bash load-generation pods that stream S3 read/write operations against Ceph RGW, outputting logs directly to pod stdout for easy `kubectl logs` inspection.
+- **`boot_timeline.py` (`task boot-timeline`)**: A Python profiling tool that monitors ArgoCD application sync states during cluster bootstrap, generating detailed time-stamped CSV reports in `boot-timelines/`.
+- **`s3-traffic-generator` (`task generate-traffic N=<n>`)**: Idempotent Python/bash load-generation pods that stream S3 read/write operations against Ceph RGW, outputting logs directly to pod stdout for easy `kubectl logs` inspection.
 - **`ceph_latency_exporter.py`**: A Prometheus exporter bridge that measures real-time Ceph RGW request latency and feeds `ceph-osd-latency` SLOs.
-- **`ripcord.sh` (`just pull-ripcord`)**: Emergency teardown utility using `gcloud` CLI directly to discover and purge all project resources matching `thump-test-*` when OpenTofu state is locked or missing.
+- **`ripcord` (`task pull-ripcord`)**: Emergency teardown utility using native Go Cloud SDK parallel DAG engine directly to discover and purge all project resources matching `thump-test-*` when OpenTofu state is locked or missing.
 
 ---
 
@@ -224,10 +224,10 @@ Run `just gen-slos` to re-compile Sloth specs into Prometheus rules and automati
 
 `thump-test` can serve as a disposable remote Kubernetes integration target for any application driven by a `Tiltfile`:
 
-1. **Remote Context**: Set `allow_k8s_contexts('thump-test')` in your `Tiltfile`. Ensure `just tunnel &` is running locally.
+1. **Remote Context**: Set `allow_k8s_contexts('thump-test')` in your `Tiltfile`. Ensure `task tunnel &` is running locally.
 2. **Architecture**: GCE VMs run `linux/amd64`. Configure `docker_build(..., platform='linux/amd64')` if developing on Apple Silicon.
 3. **Container Registry**: Nodes pull images from external registries (GHCR, Artifact Registry, Docker Hub). Local laptop registries (`kind`/`k3d`) are not accessible.
-4. **External S3 Storage Integration**: If your app requires durable object storage isolated from Ceph chaos, run `just thump-env` to copy the GCS S3 bucket credentials into your app's `.env` file.
+4. **External S3 Storage Integration**: If your app requires durable object storage isolated from Ceph chaos, run `task thump-env` to copy the GCS S3 bucket credentials into your app's `.env` file.
 
 ---
 
@@ -236,7 +236,7 @@ Run `just gen-slos` to re-compile Sloth specs into Prometheus rules and automati
 To release all GCE resources and avoid incurring GCP billing charges:
 
 ```bash
-just destroy
+task destroy
 ```
 
 This destroys all OpenTofu-managed VMs, persistent disks, firewall rules, static IPs, subnets, VPCs, and external GCS buckets.

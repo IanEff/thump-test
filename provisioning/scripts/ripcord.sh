@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Emergency teardown of every gcloud resource this repo creates, bypassing
-# OpenTofu entirely (`just destroy` needs a working `.terraform/` state --
+# OpenTofu entirely (`task destroy` needs a working `.terraform/` state --
 # this doesn't, which is the point of a ripcord). Ported from rook-gke's
 # scripts/ripcord.sh; the resource set here is much smaller and lower-risk
 # by design, since this repo's OSD disks are ordinary Tofu-managed
