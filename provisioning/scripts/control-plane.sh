@@ -19,6 +19,13 @@ if [ -f /etc/thump-test-control-plane.done ]; then
     exit 0
 fi
 
+for venv in /ceph-lab/provisioning/versions.env "$(dirname "${BASH_SOURCE[0]}")/../versions.env"; do
+    if [ -f "$venv" ]; then
+        set -a; source "$venv"; set +a
+        break
+    fi
+done
+
 set -a
 source /etc/thump-test.env
 set +a
@@ -31,7 +38,7 @@ echo "[1] Common baseline (kernel modules, sysctl, packages)"
 bash /ceph-lab/provisioning/scripts/common.sh
 
 echo "[2] Install Helm"
-HELM_VERSION="v3.16.3"
+HELM_VERSION="${HELM_VERSION:-v3.16.3}"
 ARCH=$(dpkg --print-architecture)
 curl --fail --show-error --silent --location \
      --connect-timeout 15 --max-time 180 --retry 3 --retry-delay 5 \

@@ -32,7 +32,15 @@
 # CRD actually exists.
 set -euo pipefail
 
+for venv in /ceph-lab/provisioning/versions.env "$(dirname "${BASH_SOURCE[0]}")/../versions.env"; do
+    if [ -f "$venv" ]; then
+        set -a; source "$venv"; set +a
+        break
+    fi
+done
+
 CILIUM_VERSION="${CILIUM_VERSION:-1.19.3}"
+HUBBLE_VERSION="${HUBBLE_VERSION:-v1.19.3}"
 GATEWAY_API_VERSION="${GATEWAY_API_VERSION:-v1.5.1}"
 CONTROL_PLANE_INTERNAL_IP="${CONTROL_PLANE_INTERNAL_IP:?CONTROL_PLANE_INTERNAL_IP not set}"
 
