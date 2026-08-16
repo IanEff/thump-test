@@ -71,6 +71,14 @@ components:
     enabled: false
   llm:
     enabled: false
+  checkout:
+    resources:
+      limits:
+        memory: 64Mi
+  product-catalog:
+    resources:
+      limits:
+        memory: 64Mi
   # flagd: read the flagd-config ConfigMap DIRECTLY instead of the chart's
   # default "init container copies ConfigMap into a config-rw emptyDir, flagd
   # reads the emptyDir" pattern. Why: the chaos scripts (and thump's actuator)

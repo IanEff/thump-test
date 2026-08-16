@@ -42,6 +42,17 @@ datasources:
         uid: tempo
         url: http://tempo.tracing.svc.cluster.local:3100
         editable: true
+      - name: Loki
+        type: loki
+        uid: loki
+        url: http://loki.logging.svc.cluster.local:3100
+        editable: true
+        jsonData:
+          derivedFields:
+            - datasourceUid: tempo
+              matcherRegex: '"trace_id":"(\w+)"'
+              name: TraceID
+              url: "${__value.raw}"
 
 # Unified alerting (Grafana 10+) replaces Alertmanager for lab use.
 # Rules are managed in the Grafana UI or via provisioning ConfigMaps.
