@@ -110,7 +110,7 @@ tunnel:
 # just the ArgoCD-visible portion. `cilium` is excluded from the completion
 # condition on purpose -- see the script's own docstring / CLAUDE.md gotcha #15.
 boot-timeline:
-    python3 provisioning/scripts/boot_timeline.py
+    python3 provisioning/scripts/boot_timeline.py --context={{cluster_name}}
 
 # Regenerate Prometheus rule groups from the Sloth SLO specs (requires sloth-cli, yq).
 # Splices directly into applications/infrastructure/prometheus/values.yaml —
@@ -137,29 +137,29 @@ gen-slos:
 # the pod. /start-traffic.sh itself is idempotent (pidfile-guarded) so
 # re-running this on already-running pods won't stack duplicate loops.
 generate-traffic n:
-    kubectl scale deployment/s3-traffic-generator -n default --replicas={{n}}
-    kubectl rollout status deployment/s3-traffic-generator -n default --timeout=120s
+    kubectl --context={{cluster_name}} scale deployment/s3-traffic-generator -n default --replicas={{n}}
+    kubectl --context={{cluster_name}} rollout status deployment/s3-traffic-generator -n default --timeout=120s
     # `kubectl wait` pins to the pod names it saw at list-time; if one gets
     # replaced mid-wait (chaos-mesh, node eviction, ArgoCD drift-revert, ...)
     # it hard-fails with NotFound instead of re-checking. Poll by label
     # instead so a replaced pod is just picked up fresh on the next pass.
     end=$(($(date +%s) + 120)); \
     while true; do \
-        ready=$(kubectl get pods -n default -l app=s3-traffic-generator -o jsonpath='{range .items[*]}{.status.containerStatuses[0].ready}{"\n"}{end}' 2>/dev/null | grep -c '^true$' || true); \
+        ready=$(kubectl --context={{cluster_name}} get pods -n default -l app=s3-traffic-generator -o jsonpath='{range .items[*]}{.status.containerStatuses[0].ready}{"\n"}{end}' 2>/dev/null | grep -c '^true$' || true); \
         echo "waiting for ready pods: $ready/{{n}}"; \
         [ "$ready" -ge "{{n}}" ] && break; \
         if [ $(date +%s) -ge $end ]; then echo "timed out waiting for {{n}} ready pods" >&2; exit 1; fi; \
         sleep 3; \
     done
-    for pod in $(kubectl get pods -n default -l app=s3-traffic-generator -o jsonpath='{.items[*].metadata.name}'); do \
+    for pod in $(kubectl --context={{cluster_name}} get pods -n default -l app=s3-traffic-generator -o jsonpath='{.items[*].metadata.name}'); do \
         echo "waiting for /start-traffic.sh on $pod"; \
-        kubectl exec -n default "$pod" -- sh -c 'i=0; until [ -f /start-traffic.sh ]; do i=$((i+1)); if [ $i -ge 60 ]; then echo "$0: /start-traffic.sh never appeared" >&2; exit 1; fi; sleep 2; done'; \
+        kubectl --context={{cluster_name}} exec -n default "$pod" -- sh -c 'i=0; until [ -f /start-traffic.sh ]; do i=$((i+1)); if [ $i -ge 60 ]; then echo "$0: /start-traffic.sh never appeared" >&2; exit 1; fi; sleep 2; done'; \
         echo "starting traffic on $pod"; \
-        kubectl exec -n default "$pod" -- sh -c 'nohup /start-traffic.sh > /proc/1/fd/1 2> /proc/1/fd/2 &'; \
+        kubectl --context={{cluster_name}} exec -n default "$pod" -- sh -c 'nohup /start-traffic.sh > /proc/1/fd/1 2> /proc/1/fd/2 &'; \
     done
     sleep 8
     echo "--- proof of life (last 3 lines per pod) ---"
-    kubectl logs -n default -l app=s3-traffic-generator --tail=3 --prefix
+    kubectl --context={{cluster_name}} logs -n default -l app=s3-traffic-generator --tail=3 --prefix
 
 # DESTRUCTIVE: wipes all Rook Ceph resources + zeroes OSD disks, without
 # rebuilding VMs. Use to reinstall Rook without a full tofu destroy/apply cycle.
