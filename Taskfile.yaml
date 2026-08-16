@@ -164,6 +164,45 @@ tasks:
     cmds:
       - uv run provisioning/image/build_golden_image.py --extract-only
 
+  # List custom GCE golden machine images in the GCP project.
+  images:
+    desc: List custom GCE golden machine images in GCP project
+    cmds:
+      - gcloud compute images list --project={{.PROJECT_ID}} --filter="family:thump-test-golden" --sort-by="~creationTimestamp" --format="table(name,family,creationTimestamp.date('%Y-%m-%d %H:%M'):label=CREATED,status)"
+
+  # Delete a specific custom GCE machine image (e.g. task delete-image NAME=thump-test-golden-...)
+  delete-image:
+    desc: Delete a custom GCE machine image (NAME=thump-test-golden-...)
+    vars:
+      NAME: '{{.NAME | default ""}}'
+    cmds:
+      - |
+        if [ -z "{{.NAME}}" ]; then
+          echo "ERROR: NAME is required. Example: task delete-image NAME=thump-test-golden-YYYYMMDD-HHMMSS"
+          echo "Run 'task images' to see available images."
+          exit 1
+        fi
+        gcloud compute images delete {{.NAME}} --project={{.PROJECT_ID}} --quiet
+
+  # Prune older golden images in GCP, keeping only the most recent one.
+  prune-images:
+    desc: Prune older golden images in GCP, keeping only the newest
+    cmds:
+      - |
+        images=$(gcloud compute images list --project={{.PROJECT_ID}} --filter="family=thump-test-golden" --sort-by="~creationTimestamp" --format="value(name)")
+        count=$(echo "$images" | grep -c . || true)
+        if [ "$count" -le 1 ]; then
+          echo "Only $count golden image found. Nothing to prune."
+          exit 0
+        fi
+        to_delete=$(echo "$images" | tail -n +2)
+        echo "Pruning older golden images:"
+        for img in $to_delete; do
+          echo "  -> deleting $img..."
+          gcloud compute images delete "$img" --project={{.PROJECT_ID}} --quiet
+        done
+        echo "✓ Prune complete. Kept latest image: $(echo "$images" | head -n 1)"
+
   # Scale s3-traffic-generator to n replicas and start the loop on every pod.
   # Replicas configured via N (default 1): `task generate-traffic N=3`.
   generate-traffic:

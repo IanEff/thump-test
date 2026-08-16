@@ -189,6 +189,9 @@ Run `task gen-slos` to re-compile Sloth specs into Prometheus rules and automati
 | `task destroy` | Lifecycle | Complete zero-cost infrastructure teardown. Removes all VMs, disks, subnets, and state. |
 | `task build-image` | Image Baking | Bakes a golden GCE machine image with pre-installed packages and cached containerd images. |
 | `task list-images` | Image Baking | Evaluates the GitOps tree and lists all 61 container images to be pre-cached. |
+| `task images` | Image Baking | Lists custom GCE golden machine images present in the GCP project. |
+| `task prune-images` | Image Baking | Prunes older golden images in GCP, keeping only the most recent build. |
+| `task delete-image NAME=...`| Image Baking| Deletes a specific custom GCE machine image by name. |
 | `task tunnel` | Connectivity | Opens an IAP-gated SSH tunnel to `localhost:6443` for `kubectl` access without exposing public ports. |
 | `task credentials` | Connectivity | Fetches cluster kubeconfig via OS Login and updates local `/etc/hosts` with `*.thump-test.lab` records. |
 | `task ssh [TARGET=...]` | Debugging | Connects to nodes via IAP tunnel (`TARGET="control-plane"` (default) or `"node-1"`, `"node-2"`, `"node-3"`). |
@@ -199,7 +202,7 @@ Run `task gen-slos` to re-compile Sloth specs into Prometheus rules and automati
 | `task thump-env` | Integration | Runs `sync_thump_env.py` to export GCS S3 bucket credentials into consumer `.env` files. |
 | `task pull-ripcord [-- args]` | Emergency | **Nuclear**: Out-of-band GCP resource eraser (`ripcord`) bypassing Tofu state if state is corrupted or unresponsive. |
 
-### Golden Machine Image Baking (`task build-image`, `task list-images`)
+### Golden Machine Image Baking (`task build-image`, `task list-images`, `task images`)
 
 Fresh GCE node standup on stock Ubuntu cloud images spends ~6 minutes downloading ~15GB of container images across 61 workloads over the public internet, competing for registry rate limits and bandwidth during ArgoCD sync waves.
 
@@ -216,6 +219,15 @@ task list-images
 
 # Bake the golden GCE machine image
 task build-image
+
+# Inspect custom golden images in your GCP project
+task images
+
+# Prune older golden images, keeping only the newest build
+task prune-images
+
+# Delete a specific custom image
+task delete-image NAME=thump-test-golden-YYYYMMDD-HHMMSS
 ```
 
 To boot newly provisioned clusters from the golden image, set in `terraform.tfvars`:
