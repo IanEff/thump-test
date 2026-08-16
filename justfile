@@ -118,6 +118,11 @@ boot-timeline:
 gen-slos:
     provisioning/scripts/gen_slos.sh
 
+# Build a golden GCE machine image with pre-installed packages and cached container images.
+# Booting from this image drops cluster cold boot time from ~6 minutes to ~45 seconds.
+build-image:
+    bash provisioning/image/build_golden_image.sh
+
 # Scale s3-traffic-generator to n replicas and start the loop on every pod.
 # `rollout status` returns as soon as containers are running, ahead of the
 # CRI catching up — an exec right after can 500 with "container not found";

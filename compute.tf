@@ -63,7 +63,7 @@ resource "google_compute_instance" "control_plane" {
 
   boot_disk {
     initialize_params {
-      image = "ubuntu-os-cloud/ubuntu-2404-lts-amd64"
+      image = var.boot_image
       size  = var.boot_disk_size_gb
       type  = "pd-balanced"
     }
@@ -118,7 +118,7 @@ resource "google_compute_instance" "node" {
 
   boot_disk {
     initialize_params {
-      image = "ubuntu-os-cloud/ubuntu-2404-lts-amd64"
+      image = var.boot_image
       size  = var.boot_disk_size_gb
       type  = "pd-balanced"
     }

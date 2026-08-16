@@ -58,6 +58,12 @@ variable "node_machine_type_overrides" {
   default     = {}
 }
 
+variable "boot_image" {
+  description = "Boot disk image for control plane and worker nodes (image family or specific image name). Defaults to stock Ubuntu 24.04 LTS; set to a golden image (e.g. global/images/family/thump-test-golden) to skip runtime package/image downloads."
+  type        = string
+  default     = "ubuntu-os-cloud/ubuntu-2404-lts-amd64"
+}
+
 variable "boot_disk_size_gb" {
   description = "Boot disk size for every instance. Sized to comfortably hold /var/lib/rancher (k3s data dir) on the boot disk itself — no separate Lima-style 'rancher' data disk is needed on GCE. Bumped 30→50: with the OTel demo's ~18 pods of images landing on the workers alongside Ceph+obs, the 30GB disk sat at ~72% used, tripping Ceph's mon_data_avail_warn (fires <30% avail). +20GB×4 nodes is ~\\$3/mo of pd-standard."
   type        = number
