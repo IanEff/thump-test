@@ -187,6 +187,8 @@ Run `task gen-slos` to re-compile Sloth specs into Prometheus rules and automati
 |---|---|---|
 | `task up` | Lifecycle | Complete one-shot cluster bring-up: `tofu apply`, fetch kubeconfig, write `/etc/hosts`, and sync GCS credentials. |
 | `task destroy` | Lifecycle | Complete zero-cost infrastructure teardown. Removes all VMs, disks, subnets, and state. |
+| `task build-image` | Image Baking | Bakes a golden GCE machine image with pre-installed packages and cached containerd images. |
+| `task list-images` | Image Baking | Evaluates the GitOps tree and lists all 61 container images to be pre-cached. |
 | `task tunnel` | Connectivity | Opens an IAP-gated SSH tunnel to `localhost:6443` for `kubectl` access without exposing public ports. |
 | `task credentials` | Connectivity | Fetches cluster kubeconfig via OS Login and updates local `/etc/hosts` with `*.thump-test.lab` records. |
 | `task ssh [TARGET=...]` | Debugging | Connects to nodes via IAP tunnel (`TARGET="control-plane"` (default) or `"node-1"`, `"node-2"`, `"node-3"`). |
@@ -196,6 +198,30 @@ Run `task gen-slos` to re-compile Sloth specs into Prometheus rules and automati
 | `task boot-timeline` | Profiling | Launches `boot_timeline.py` to time every ArgoCD application reaching `Healthy` state from cold boot. |
 | `task thump-env` | Integration | Runs `sync_thump_env.py` to export GCS S3 bucket credentials into consumer `.env` files. |
 | `task pull-ripcord [-- args]` | Emergency | **Nuclear**: Out-of-band GCP resource eraser (`ripcord`) bypassing Tofu state if state is corrupted or unresponsive. |
+
+### Golden Machine Image Baking (`task build-image`, `task list-images`)
+
+Fresh GCE node standup on stock Ubuntu cloud images spends ~6 minutes downloading ~15GB of container images across 61 workloads over the public internet, competing for registry rate limits and bandwidth during ArgoCD sync waves.
+
+`task build-image` bakes a pre-cached GCE golden image that drops cold-boot cluster convergence to ~45 seconds:
+
+1. **Dynamic GitOps Extraction**: `build_golden_image.py` (invoked via `uv`) traverses `applications/` and `cluster-bootstrap/`, evaluating every `kustomization.yaml` with `kubectl kustomize --enable-helm`. It extracts the exact 61 images ArgoCD reconciles in-cluster without maintaining a static list.
+2. **Ephemeral Builder VM**: Launches an ephemeral `e2-standard-4` builder VM in the configured zone (`us-east1-b`), transfers `provisioning/`, and runs `common.sh` directly with root privileges (kernel modules, sysctl, APT packages, fish/bash ergonomics).
+3. **Containerd Pre-Caching**: Starts a transient k3s server (`v1.36`) to bring up containerd, pulls all 61 extracted images into the `k8s.io` namespace with exponential backoff retries, then purges cluster state (`/var/lib/rancher/k3s/server/db`, TLS certs, machine-id) while leaving the containerd layer cache intact.
+4. **Image Freeze**: Captures a GCE image tagged under the `thump-test-golden` family and destroys the builder VM.
+
+```bash
+# Preview the discovered container image inventory without touching GCP
+task list-images
+
+# Bake the golden GCE machine image
+task build-image
+```
+
+To boot newly provisioned clusters from the golden image, set in `terraform.tfvars`:
+```hcl
+boot_image = "global/images/family/thump-test-golden"
+```
 
 ### Diagnostic & Integration Utilities
 
