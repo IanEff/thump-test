@@ -106,12 +106,12 @@ tasks:
   hosts:
     desc: Add *.thump-test.lab host entries to /etc/hosts
     cmds:
-      - sudo python3 provisioning/scripts/manage_hosts.py add "$(tofu output -raw control_plane_external_ip)"
+      - sudo /opt/homebrew/bin/python3 {{.ROOT_DIR}}/provisioning/scripts/manage_hosts.py add "$(tofu output -raw control_plane_external_ip)"
 
   hosts-remove:
     desc: Remove *.thump-test.lab host entries from /etc/hosts
     cmds:
-      - sudo python3 provisioning/scripts/manage_hosts.py remove
+      - sudo /opt/homebrew/bin/python3 {{.ROOT_DIR}}/provisioning/scripts/manage_hosts.py remove
 
   # SSH to a node. TARGET is "control-plane" (default) or "node-<n>", e.g. `task ssh TARGET=node-2`.
   # Port 22 is IAP-only (network.tf) — requires roles/iap.tunnelResourceAccessor.
