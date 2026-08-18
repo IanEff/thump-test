@@ -28,3 +28,11 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+  ignoreDifferences:
+    # Allow chaos runs to temporarily disable selfHeal on child Applications
+    # without thump-test-root reverting the syncPolicy back within ~1s.
+    - group: argoproj.io
+      kind: Application
+      jsonPointers:
+        - /spec/syncPolicy
