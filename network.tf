@@ -54,15 +54,14 @@ resource "google_compute_firewall" "allow_k3s_api" {
 
 # Cilium Gateway (gatewayAPI.hostNetwork mode, pinned to the control-plane
 # node — see applications/infrastructure/cilium/values.yaml). 4245 is the
-# cleartext Hubble relay listener on the same Gateway. Stays on
-# var.allowed_source_ranges (not IAP) — this is app/browser traffic
-# (Grafana, dashboards, thump's HTTP access), not an admin channel, and
-# proxying a browser through an IAP tunnel is much clunkier than SSH/kubectl.
+# cleartext Hubble relay listener on the same Gateway.
+# Accessible via IAP TCP tunneling (local.iap_source_range) and any optional
+# caller-configured CIDR ranges in var.allowed_source_ranges.
 resource "google_compute_firewall" "allow_gateway" {
   name          = "${var.cluster_name}-allow-gateway"
   network       = google_compute_network.main.id
   direction     = "INGRESS"
-  source_ranges = var.allowed_source_ranges
+  source_ranges = distinct(concat([local.iap_source_range], var.allowed_source_ranges))
   target_tags   = ["${var.cluster_name}-control-plane"]
 
   allow {
