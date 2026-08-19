@@ -104,9 +104,9 @@ tasks:
       - PROJECT_ID={{.PROJECT_ID}} CLUSTER_NAME={{.CLUSTER_NAME}} python3 provisioning/scripts/fetch_kubeconfig.py add
 
   hosts:
-    desc: Add *.thump-test.lab host entries to /etc/hosts
+    desc: Add *.thump-test.lab host entries to /etc/hosts (points to 127.0.0.1 for local IAP proxying)
     cmds:
-      - sudo /opt/homebrew/bin/python3 {{.ROOT_DIR}}/provisioning/scripts/manage_hosts.py add "$(tofu output -raw control_plane_external_ip)"
+      - sudo /opt/homebrew/bin/python3 {{.ROOT_DIR}}/provisioning/scripts/manage_hosts.py add 127.0.0.1
 
   hosts-remove:
     desc: Remove *.thump-test.lab host entries from /etc/hosts
@@ -122,15 +122,43 @@ tasks:
     cmds:
       - gcloud compute ssh {{.CLUSTER_NAME}}-{{.TARGET}} --zone={{.ZONE}} --project={{.PROJECT_ID}} --tunnel-through-iap
 
-  # Open an IAP tunnel to the k3s API (port 6443 is IAP-only, see network.tf).
-  # Foreground/blocking on purpose — leave it running in its own terminal (or
-  # background it yourself with `task tunnel &`) for as long as you need
-  # kubectl access; fetch_kubeconfig.py points the kubeconfig server at
-  # 127.0.0.1:6443 to match.
-  tunnel:
-    desc: Open an IAP tunnel to k3s API on localhost:6443
+  # Check whether the cluster is currently provisioned in GCS state & GCP
+  status:
+    desc: Inspect current cluster state from shared GCS backend and GCP instances
     cmds:
-      - gcloud compute start-iap-tunnel {{.CLUSTER_NAME}}-control-plane 6443 --local-host-port=localhost:6443 --zone={{.ZONE}} --project={{.PROJECT_ID}}
+      - PROJECT_ID={{.PROJECT_ID}} CLUSTER_NAME={{.CLUSTER_NAME}} python3 provisioning/scripts/status.py
+
+  # Open multiplexed IAP tunnels to control-plane (6443: k3s API, 443: Gateway UIs, 4222: NATS).
+  # Run in background (`task tunnel &`), foreground, or with sudo (`sudo task tunnel`).
+  tunnel:
+    desc: "Open multiplexed IAP tunnels (6443: k3s API, 443: Gateway, 4222: NATS)"
+    silent: true
+    cmds:
+      - python3 provisioning/scripts/tunnel.py --cluster={{.CLUSTER_NAME}} --zone={{.ZONE}} --project={{.PROJECT_ID}} {{.CLI_ARGS}}
+
+  'tunnel:k8s':
+    desc: Open IAP tunnel to k3s API only (localhost:6443)
+    silent: true
+    cmds:
+      - python3 provisioning/scripts/tunnel.py --cluster={{.CLUSTER_NAME}} --zone={{.ZONE}} --project={{.PROJECT_ID}} --ports=6443
+
+  'tunnel:gateway':
+    desc: Open IAP tunnel to Cilium Gateway only (localhost:443, run with sudo)
+    silent: true
+    cmds:
+      - python3 provisioning/scripts/tunnel.py --cluster={{.CLUSTER_NAME}} --zone={{.ZONE}} --project={{.PROJECT_ID}} --ports=443
+
+  'tunnel:nats':
+    desc: Open IAP tunnel to NATS JetStream only (localhost:4222)
+    silent: true
+    cmds:
+      - python3 provisioning/scripts/tunnel.py --cluster={{.CLUSTER_NAME}} --zone={{.ZONE}} --project={{.PROJECT_ID}} --ports=4222
+
+  'tunnel:kill':
+    desc: Force kill all background IAP tunnels for this cluster
+    silent: true
+    cmds:
+      - pkill -f "start-iap-tunnel.*{{.CLUSTER_NAME}}" || true
 
   # Times how long each ArgoCD Application takes to reach Healthy on a cold
   # boot, and writes a CSV timeline to boot-timelines/. Run in its own terminal
@@ -249,22 +277,22 @@ tasks:
       - go run ./provisioning/cmd/ripcord --project={{.PROJECT_ID}} --cluster={{.CLUSTER_NAME}} {{.CLI_ARGS}}
 
   # Chaos injection/clearing tasks for OTel demo flagd flags
-  chaos:product-catalog-on:
+  'chaos:product-catalog-on':
     desc: "Chaos: inject productCatalogFailure via flagd (frontend 500s on target product)"
     cmds:
       - bash chaos/flag-product-catalog-on.sh
 
-  chaos:product-catalog-off:
+  'chaos:product-catalog-off':
     desc: "Chaos: clear productCatalogFailure via flagd"
     cmds:
       - bash chaos/flag-product-catalog-off.sh
 
-  chaos:cart-on:
+  'chaos:cart-on':
     desc: "Chaos: inject cartFailure via flagd (cart health Unhealthy, cart RPCs fail)"
     cmds:
       - bash chaos/flag-cart-on.sh
 
-  chaos:cart-off:
+  'chaos:cart-off':
     desc: "Chaos: clear cartFailure via flagd"
     cmds:
       - bash chaos/flag-cart-off.sh

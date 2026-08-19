@@ -91,9 +91,8 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.action == "add":
-        if not args.ip:
-            parser.error("'add' requires the control-plane external IP (see: tofu output control_plane_external_ip)")
-        add(args.ip)
+        ip = args.ip if args.ip else "127.0.0.1"
+        add(ip)
     else:
         remove()
 

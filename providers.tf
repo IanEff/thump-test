@@ -1,5 +1,11 @@
 terraform {
   required_version = ">= 1.6.0"
+
+  backend "gcs" {
+    bucket = "thump-test-tfstate-terraform-sandbox-430820"
+    prefix = "thump-test/state"
+  }
+
   required_providers {
     google = {
       source  = "hashicorp/google"

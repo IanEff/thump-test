@@ -71,8 +71,9 @@ variable "boot_disk_size_gb" {
 }
 
 variable "allowed_source_ranges" {
-  description = "CIDR allowlist for the Cilium Gateway (80/443/4245) firewall rule only — SSH (22) and the k3s API (6443) are IAP-tunnel-only (see network.tf's iap_source_range) and don't consume this variable. No default on purpose — every user of this repo must explicitly scope this to their own IP (and thump's, if it runs elsewhere) rather than inherit a silently-permissive default."
+  description = "Optional additional CIDR allowlist for the Cilium Gateway (80/443/4245) firewall rule. Gateway is always accessible over IAP TCP forwarding without setting this variable."
   type        = list(string)
+  default     = []
 }
 
 variable "subnet_cidr" {
